@@ -1,10 +1,16 @@
 import {
+  AuthStatus,
+  AuthToken,
+  ClinicalSummary,
   CompleteRequest,
+  DoctorPatient,
+  EditableClinicalSummary,
   InterviewResponse,
   Patient,
   RespondRequest,
   RuntimeStatus,
   StartRequest,
+  TimelineEvent,
 } from "./contracts";
 
 const apiBase = (
@@ -59,6 +65,17 @@ async function post<TRequest, TResponse>(path: string, body: TRequest): Promise<
   return request<TResponse>(path, { method: "POST", body: JSON.stringify(body) });
 }
 
+async function authorized<TResponse>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+): Promise<TResponse> {
+  return request<TResponse>(path, {
+    ...init,
+    headers: { ...init?.headers, Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function startInterview(patient: Patient, consent: true): Promise<InterviewResponse> {
   const payload: StartRequest = { patient, consent };
   return post<StartRequest, InterviewResponse>("/interview/start", payload);
@@ -78,4 +95,66 @@ export async function getInterview(interviewId: string): Promise<InterviewRespon
 
 export async function getRuntimeStatus(): Promise<RuntimeStatus> {
   return request<RuntimeStatus>("/health");
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  return request<AuthStatus>("/auth/status");
+}
+
+export async function setupDoctor(
+  username: string,
+  displayName: string,
+  password: string,
+): Promise<AuthToken> {
+  return post("/auth/setup", { username, display_name: displayName, password });
+}
+
+export async function loginDoctor(username: string, password: string): Promise<AuthToken> {
+  return post("/auth/login", { username, password });
+}
+
+export async function getDoctorPatients(token: string): Promise<DoctorPatient[]> {
+  return authorized("/doctor/patients", token);
+}
+
+export async function getDoctorSummary(
+  patientId: string,
+  interviewId: string,
+  token: string,
+): Promise<ClinicalSummary> {
+  return authorized(
+    `/doctor/patients/${encodeURIComponent(patientId)}/summary?interview_id=${encodeURIComponent(interviewId)}`,
+    token,
+  );
+}
+
+export async function getTimeline(patientId: string, token: string): Promise<TimelineEvent[]> {
+  return authorized(`/doctor/patients/${encodeURIComponent(patientId)}/timeline`, token);
+}
+
+export async function getFullInterview(interviewId: string, token: string): Promise<unknown> {
+  return authorized(`/interview/${encodeURIComponent(interviewId)}/record`, token);
+}
+
+export async function saveDoctorSummary(
+  interviewId: string,
+  summary: EditableClinicalSummary,
+  expectedVersion: number,
+  token: string,
+): Promise<ClinicalSummary> {
+  return authorized(`/doctor/interviews/${encodeURIComponent(interviewId)}/summary`, token, {
+    method: "PUT",
+    body: JSON.stringify({ summary, expected_version: expectedVersion }),
+  });
+}
+
+export async function approveDoctorSummary(
+  interviewId: string,
+  expectedVersion: number,
+  token: string,
+): Promise<ClinicalSummary> {
+  return authorized(`/doctor/interviews/${encodeURIComponent(interviewId)}/approve`, token, {
+    method: "POST",
+    body: JSON.stringify({ expected_version: expectedVersion }),
+  });
 }

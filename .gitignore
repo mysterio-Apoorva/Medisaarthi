@@ -8,4 +8,9 @@ __pycache__/
 frontend/patient/.env
 frontend/patient/.env.local
 frontend/patient/.next
+frontend/patient/.next-verify
 frontend/patient/node_modules
+frontend/patient/*.tsbuildinfo
+data/*.db
+data/*.db-shm
+data/*.db-wal

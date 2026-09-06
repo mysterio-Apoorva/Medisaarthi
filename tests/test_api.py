@@ -5,7 +5,7 @@ from app.config import Settings, build_service
 
 
 def client():
-    return TestClient(create_app(build_service(Settings())))
+    return TestClient(create_app(build_service(Settings(provider="mock"))))
 
 
 def test_full_api_lifecycle():

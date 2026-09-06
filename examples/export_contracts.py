@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.api.main import CompleteRequest, RespondRequest, StartRequest
 from app.interview.schemas import ClinicalState, Interview, InterviewResponse, NextQuestion, Patient
+from app.records import ClinicalSummary, PatientHistory, TimelineEvent
 
 MODELS = {
     "patient": Patient,
@@ -15,6 +16,9 @@ MODELS = {
     "start_request": StartRequest,
     "respond_request": RespondRequest,
     "complete_request": CompleteRequest,
+    "history": PatientHistory,
+    "clinical_summary": ClinicalSummary,
+    "timeline": TimelineEvent,
 }
 
 

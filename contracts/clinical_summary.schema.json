@@ -1,0 +1,206 @@
+{
+  "$defs": {
+    "CurrentComplaint": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        }
+      },
+      "title": "CurrentComplaint",
+      "type": "object"
+    },
+    "PatientSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "patient_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "title": "Patient Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "age": {
+          "title": "Age",
+          "type": "integer"
+        },
+        "gender": {
+          "title": "Gender",
+          "type": "string"
+        },
+        "language": {
+          "title": "Language",
+          "type": "string"
+        }
+      },
+      "required": [
+        "patient_id",
+        "name",
+        "age",
+        "gender",
+        "language"
+      ],
+      "title": "PatientSnapshot",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "patient_snapshot": {
+      "$ref": "#/$defs/PatientSnapshot"
+    },
+    "current_complaint": {
+      "$ref": "#/$defs/CurrentComplaint"
+    },
+    "interview_summary": {
+      "maxLength": 5000,
+      "title": "Interview Summary",
+      "type": "string"
+    },
+    "past_history": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Past History",
+      "type": "array"
+    },
+    "medications": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Medications",
+      "type": "array"
+    },
+    "allergies": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allergies",
+      "type": "array"
+    },
+    "important_findings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Important Findings",
+      "type": "array"
+    },
+    "missing_information": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Information",
+      "type": "array"
+    },
+    "priority_flags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Priority Flags",
+      "type": "array"
+    },
+    "interview_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Interview Id",
+      "type": "string"
+    },
+    "patient_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "status": {
+      "default": "draft",
+      "enum": [
+        "draft",
+        "approved"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "approved_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved At"
+    }
+  },
+  "required": [
+    "patient_snapshot",
+    "current_complaint",
+    "interview_summary",
+    "interview_id",
+    "patient_id"
+  ],
+  "title": "ClinicalSummary",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

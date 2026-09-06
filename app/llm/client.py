@@ -6,7 +6,9 @@ from app.interview.schemas import ClinicalState, Extraction, NextQuestion
 class ProviderError(RuntimeError):
     """Sanitized external-provider failure; never contains patient text or secrets."""
 
-    def __init__(self, message: str, *, code: str = "provider_error", request_id: str | None = None):
+    def __init__(
+        self, message: str, *, code: str = "provider_error", request_id: str | None = None
+    ):
         super().__init__(message)
         self.code = code
         self.request_id = request_id

@@ -127,7 +127,7 @@ export default function PatientInterview() {
   const runtimeLabel = backendReachable === false ? copy.offlineTitle : runtime?.extraction_mode === "gemini" ? copy.liveTitle : copy.demoTitle;
 
   return <main className="app-shell">
-    <header className="topbar"><button className="brand" onClick={reset} aria-label="Medisaarthi home"><span className="brand-mark">M</span><span>MEDISAARTHI<small>Patient intake</small></span></button><div className={`runtime-pill ${backendReachable === false ? "offline" : runtime?.extraction_mode === "gemini" ? "live" : "demo"}`}><span className="status-dot" />{runtimeLabel}</div></header>
+    <header className="topbar"><button className="brand" onClick={reset} aria-label="Medisaarthi home"><span className="brand-mark">M</span><span>MEDISAARTHI<small>Patient intake</small></span></button><div className="portal-links"><a href="/doctor">Doctor portal</a><div className={`runtime-pill ${backendReachable === false ? "offline" : runtime?.extraction_mode === "gemini" ? "live" : "demo"}`}><span className="status-dot" />{runtimeLabel}</div></div></header>
     <div className="workspace">
       <aside className="step-rail" aria-label="Interview progress"><p className="rail-kicker">YOUR VISIT</p><ol>{steps.map((item, index) => <li key={item.id} className={index < activeIndex || step === "complete" ? "done" : index === activeIndex ? "active" : ""}><span>{index < activeIndex || step === "complete" ? "✓" : index + 1}</span>{language === "hi" ? item.hi : item.en}</li>)}</ol><div className="privacy-note"><ShieldIcon /><p>{copy.privacy}</p></div></aside>
       <section className="stage" aria-live="polite">

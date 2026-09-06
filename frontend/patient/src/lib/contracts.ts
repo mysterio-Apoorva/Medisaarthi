@@ -90,5 +90,52 @@ export interface RuntimeStatus {
   status: "ok";
   schema_version: "1.0";
   extraction_mode: "mock" | "gemini";
-  persistence: "memory" | "external";
+  persistence: "memory" | "sqlite";
+}
+
+export interface DoctorPatient {
+  patient: Patient;
+  interview_id: string | null;
+  completed: boolean;
+  updated_at: string | null;
+  chief_complaint: string | null;
+  summary_status: "draft" | "approved" | null;
+}
+
+export interface EditableClinicalSummary {
+  patient_snapshot: Patient & { name: string; age: number };
+  current_complaint: { name: string | null; duration: string | null; severity: number | null };
+  interview_summary: string;
+  past_history: string[];
+  medications: string[];
+  allergies: string[];
+  important_findings: string[];
+  missing_information: string[];
+  priority_flags: string[];
+}
+
+export interface ClinicalSummary extends EditableClinicalSummary {
+  interview_id: string;
+  patient_id: string;
+  status: "draft" | "approved";
+  version: number;
+  updated_at: string | null;
+  approved_at: string | null;
+}
+
+export interface TimelineEvent {
+  date: string | null;
+  title: string;
+  detail: string | null;
+  source: string;
+  confidence: number;
+}
+
+export interface AuthStatus { needs_setup: boolean }
+
+export interface AuthToken {
+  access_token: string;
+  token_type: "bearer";
+  expires_at: string;
+  doctor: { doctor_id: number; username: string; display_name: string };
 }

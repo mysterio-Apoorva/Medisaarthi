@@ -12,7 +12,6 @@ from app.interview.schemas import ClinicalField, ClinicalState, Extraction, Fact
 from app.llm.client import ProviderError
 from app.llm.prompts import EXTRACTION_PROMPT
 
-
 BOOLEAN_FIELDS = {"breathlessness", "cough", "sudden_onset", "vomiting"}
 LIST_FIELDS = {
     "past_medical_history",
@@ -53,9 +52,7 @@ class GeminiFactPayload(BaseModel):
             else:
                 expected = "text_value"
             if populated != [expected]:
-                raise ValueError(
-                    f"Reported {self.field} must use only the {expected} slot"
-                )
+                raise ValueError(f"Reported {self.field} must use only the {expected} slot")
             value = values[expected]
         else:
             if self.status not in {"unknown", "declined"} or populated:
@@ -87,7 +84,7 @@ class GeminiProvider:
     def __init__(
         self,
         api_key: str,
-        model: str = "gemini-3.6-flash",
+        model: str = "gemini-2.5-flash",
         timeout: float = 30,
         client=None,
     ):
@@ -140,7 +137,9 @@ class GeminiProvider:
                 message = "Gemini rejected the API key. Create a valid Google AI Studio key."
                 code = "authentication_failed"
             elif status == 403:
-                message = "This Gemini API key does not have permission to use the configured model."
+                message = (
+                    "This Gemini API key does not have permission to use the configured model."
+                )
                 code = "permission_denied"
             elif status == 404:
                 message = "The configured Gemini model was not found or is unavailable."

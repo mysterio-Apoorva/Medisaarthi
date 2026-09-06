@@ -1,8 +1,8 @@
 import os
 from typing import Literal
 
-from pydantic import Field, SecretStr
 from dotenv import load_dotenv
+from pydantic import Field, SecretStr
 
 from app.interview.engine import InterviewEngine
 from app.interview.schemas import Model
@@ -10,26 +10,22 @@ from app.interview.state import InMemoryInterviewStore, InterviewService, Interv
 from app.llm.client import LLMClient
 from app.llm.mock import MockProvider
 
-
 load_dotenv()
 
 
 class Settings(Model):
-    provider: Literal["mock", "gemini"] = "mock"
+    provider: Literal["mock", "gemini"] = "gemini"
     api_key: SecretStr = SecretStr("")
-    model: str = "gemini-3.6-flash"
+    model: str = "gemini-2.5-flash"
     timeout_seconds: float = Field(default=30, gt=0, le=120)
     max_turns: int = Field(default=40, ge=1, le=100)
 
     @classmethod
     def from_env(cls) -> "Settings":
-        model = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-        if model.removeprefix("models/") == "gemini-2.5-flash":
-            model = "gemini-3.6-flash"
         return cls(
-            provider=os.getenv("M2_LLM_PROVIDER", "mock"),
+            provider=os.getenv("M2_LLM_PROVIDER", "gemini"),
             api_key=os.getenv("GEMINI_API_KEY", ""),
-            model=model,
+            model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
             timeout_seconds=os.getenv("M2_LLM_TIMEOUT_SECONDS", "30"),
             max_turns=os.getenv("M2_MAX_TURNS", "40"),
         )
@@ -43,8 +39,8 @@ def build_service(
 ) -> InterviewService:
     """Compose M2 with replaceable provider and persistence ports.
 
-    M3 can inject a transaction-backed InterviewStore without importing FastAPI or
-    changing the interview domain. Defaults remain safe for an offline demo.
+    A caller can inject another transaction-backed InterviewStore without changing
+    the interview domain. The production composition uses durable SQLite storage.
     """
     settings = settings or Settings.from_env()
     if provider is None:

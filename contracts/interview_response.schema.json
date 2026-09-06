@@ -1,0 +1,576 @@
+{
+  "$defs": {
+    "ClinicalState": {
+      "additionalProperties": false,
+      "properties": {
+        "chief_complaint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chief Complaint"
+        },
+        "hpi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hpi"
+        },
+        "duration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Duration"
+        },
+        "severity": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Severity"
+        },
+        "location": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Location"
+        },
+        "temperature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Temperature"
+        },
+        "breathlessness": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Breathlessness"
+        },
+        "breathlessness_onset": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Breathlessness Onset"
+        },
+        "cough": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cough"
+        },
+        "sudden_onset": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sudden Onset"
+        },
+        "vomiting": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vomiting"
+        },
+        "past_medical_history": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Past Medical History"
+        },
+        "medications": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Medications"
+        },
+        "allergies": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allergies"
+        },
+        "family_history": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Family History"
+        },
+        "personal_history": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Personal History"
+        }
+      },
+      "title": "ClinicalState",
+      "type": "object"
+    },
+    "Extraction": {
+      "additionalProperties": false,
+      "properties": {
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "maxItems": 30,
+          "title": "Facts",
+          "type": "array"
+        },
+        "uncertain_fields": {
+          "items": {
+            "enum": [
+              "chief_complaint",
+              "hpi",
+              "duration",
+              "severity",
+              "location",
+              "temperature",
+              "breathlessness",
+              "breathlessness_onset",
+              "cough",
+              "sudden_onset",
+              "vomiting",
+              "past_medical_history",
+              "medications",
+              "allergies",
+              "family_history",
+              "personal_history"
+            ],
+            "type": "string"
+          },
+          "title": "Uncertain Fields",
+          "type": "array"
+        }
+      },
+      "title": "Extraction",
+      "type": "object"
+    },
+    "Fact": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "chief_complaint",
+            "hpi",
+            "duration",
+            "severity",
+            "location",
+            "temperature",
+            "breathlessness",
+            "breathlessness_onset",
+            "cough",
+            "sudden_onset",
+            "vomiting",
+            "past_medical_history",
+            "medications",
+            "allergies",
+            "family_history",
+            "personal_history"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "status": {
+          "enum": [
+            "reported",
+            "unknown",
+            "declined"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "evidence": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Evidence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "status",
+        "evidence"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "NextQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "chief_complaint",
+            "hpi",
+            "duration",
+            "severity",
+            "location",
+            "temperature",
+            "breathlessness",
+            "breathlessness_onset",
+            "cough",
+            "sudden_onset",
+            "vomiting",
+            "past_medical_history",
+            "medications",
+            "allergies",
+            "family_history",
+            "personal_history"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "type": {
+          "const": "text",
+          "default": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "en",
+            "hi"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "clarification": {
+          "default": false,
+          "title": "Clarification",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "language"
+      ],
+      "title": "NextQuestion",
+      "type": "object"
+    },
+    "PriorityFlag": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "source": {
+          "const": "prototype_rule",
+          "default": "prototype_rule",
+          "title": "Source",
+          "type": "string"
+        },
+        "evidence_fields": {
+          "items": {
+            "enum": [
+              "chief_complaint",
+              "hpi",
+              "duration",
+              "severity",
+              "location",
+              "temperature",
+              "breathlessness",
+              "breathlessness_onset",
+              "cough",
+              "sudden_onset",
+              "vomiting",
+              "past_medical_history",
+              "medications",
+              "allergies",
+              "family_history",
+              "personal_history"
+            ],
+            "type": "string"
+          },
+          "title": "Evidence Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "evidence_fields"
+      ],
+      "title": "PriorityFlag",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "patient_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "interview_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Interview Id",
+      "type": "string"
+    },
+    "revision": {
+      "title": "Revision",
+      "type": "integer"
+    },
+    "extracted": {
+      "$ref": "#/$defs/Extraction"
+    },
+    "clinical_state": {
+      "$ref": "#/$defs/ClinicalState"
+    },
+    "missing_information": {
+      "items": {
+        "enum": [
+          "chief_complaint",
+          "hpi",
+          "duration",
+          "severity",
+          "location",
+          "temperature",
+          "breathlessness",
+          "breathlessness_onset",
+          "cough",
+          "sudden_onset",
+          "vomiting",
+          "past_medical_history",
+          "medications",
+          "allergies",
+          "family_history",
+          "personal_history"
+        ],
+        "type": "string"
+      },
+      "title": "Missing Information",
+      "type": "array"
+    },
+    "unknown_information": {
+      "items": {
+        "enum": [
+          "chief_complaint",
+          "hpi",
+          "duration",
+          "severity",
+          "location",
+          "temperature",
+          "breathlessness",
+          "breathlessness_onset",
+          "cough",
+          "sudden_onset",
+          "vomiting",
+          "past_medical_history",
+          "medications",
+          "allergies",
+          "family_history",
+          "personal_history"
+        ],
+        "type": "string"
+      },
+      "title": "Unknown Information",
+      "type": "array"
+    },
+    "next_question": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NextQuestion"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "priority_flags": {
+      "items": {
+        "$ref": "#/$defs/PriorityFlag"
+      },
+      "title": "Priority Flags",
+      "type": "array"
+    },
+    "completed": {
+      "title": "Completed",
+      "type": "boolean"
+    },
+    "completion_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "collected",
+            "patient_requested",
+            "turn_limit"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Completion Reason"
+    }
+  },
+  "required": [
+    "patient_id",
+    "interview_id",
+    "revision",
+    "clinical_state",
+    "missing_information",
+    "unknown_information",
+    "next_question",
+    "priority_flags",
+    "completed",
+    "completion_reason"
+  ],
+  "title": "InterviewResponse",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

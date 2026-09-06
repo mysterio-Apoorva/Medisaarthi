@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.env
+.coverage
+frontend/patient/.env
+frontend/patient/.env.local
+frontend/patient/.next
+frontend/patient/node_modules

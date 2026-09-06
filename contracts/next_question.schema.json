@@ -1,0 +1,58 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "enum": [
+        "chief_complaint",
+        "hpi",
+        "duration",
+        "severity",
+        "location",
+        "temperature",
+        "breathlessness",
+        "breathlessness_onset",
+        "cough",
+        "sudden_onset",
+        "vomiting",
+        "past_medical_history",
+        "medications",
+        "allergies",
+        "family_history",
+        "personal_history"
+      ],
+      "title": "Id",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "type": {
+      "const": "text",
+      "default": "text",
+      "title": "Type",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "hi"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "clarification": {
+      "default": false,
+      "title": "Clarification",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "text",
+    "language"
+  ],
+  "title": "NextQuestion",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,1548 @@
+{
+  "fever": {
+    "first_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO1",
+      "interview_id": "INT_04d9ca4763024403bc5ccdd8615eb8cd",
+      "revision": 1,
+      "extracted": {
+        "facts": [
+          {
+            "field": "chief_complaint",
+            "value": "fever",
+            "status": "reported",
+            "evidence": "Mujhe 3 din se fever hai."
+          },
+          {
+            "field": "duration",
+            "value": "3 days",
+            "status": "reported",
+            "evidence": "Mujhe 3 din se fever hai."
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "fever",
+        "hpi": null,
+        "duration": "3 days",
+        "severity": null,
+        "location": null,
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": null,
+        "medications": null,
+        "allergies": null,
+        "family_history": null,
+        "personal_history": null
+      },
+      "missing_information": [
+        "temperature",
+        "cough",
+        "hpi",
+        "past_medical_history",
+        "medications",
+        "allergies",
+        "family_history",
+        "personal_history"
+      ],
+      "unknown_information": [],
+      "next_question": {
+        "id": "temperature",
+        "text": "क्या आपने तापमान मापा है? इकाई भी बताइए।",
+        "type": "text",
+        "language": "hi",
+        "clarification": false
+      },
+      "priority_flags": [],
+      "completed": false,
+      "completion_reason": null
+    },
+    "final_record": {
+      "schema_version": "1.0",
+      "interview_id": "INT_04d9ca4763024403bc5ccdd8615eb8cd",
+      "patient_id": "DEMO1",
+      "language": "hi",
+      "consent": true,
+      "consent_recorded_at": "2026-09-05T19:50:44.570572Z",
+      "clinical_state": {
+        "chief_complaint": "fever",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": null,
+        "location": null,
+        "temperature": "38 C",
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": false,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "chief_complaint": "fever",
+      "symptoms": [
+        {
+          "name": "fever",
+          "present": true,
+          "duration": "3 days",
+          "severity": null
+        },
+        {
+          "name": "cough",
+          "present": false,
+          "duration": null,
+          "severity": null
+        }
+      ],
+      "responses": [
+        {
+          "turn_id": 1,
+          "question": {
+            "id": "chief_complaint",
+            "text": "आज आपको किस परेशानी के कारण अस्पताल आना पड़ा?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "Mujhe 3 din se fever hai.",
+          "extraction": {
+            "facts": [
+              {
+                "field": "chief_complaint",
+                "value": "fever",
+                "status": "reported",
+                "evidence": "Mujhe 3 din se fever hai."
+              },
+              {
+                "field": "duration",
+                "value": "3 days",
+                "status": "reported",
+                "evidence": "Mujhe 3 din se fever hai."
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.572898Z"
+        },
+        {
+          "turn_id": 2,
+          "question": {
+            "id": "temperature",
+            "text": "क्या आपने तापमान मापा है? इकाई भी बताइए।",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "38 C",
+          "extraction": {
+            "facts": [
+              {
+                "field": "temperature",
+                "value": "38 C",
+                "status": "reported",
+                "evidence": "38 C"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.574440Z"
+        },
+        {
+          "turn_id": 3,
+          "question": {
+            "id": "cough",
+            "text": "क्या खाँसी भी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "no",
+          "extraction": {
+            "facts": [
+              {
+                "field": "cough",
+                "value": false,
+                "status": "reported",
+                "evidence": "no"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.575082Z"
+        },
+        {
+          "turn_id": 4,
+          "question": {
+            "id": "hpi",
+            "text": "यह परेशानी कैसे शुरू हुई और कैसे बदली, बताइए।",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "it started gradually and comes and goes",
+          "extraction": {
+            "facts": [
+              {
+                "field": "hpi",
+                "value": "it started gradually and comes and goes",
+                "status": "reported",
+                "evidence": "it started gradually and comes and goes"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.575683Z"
+        },
+        {
+          "turn_id": 5,
+          "question": {
+            "id": "past_medical_history",
+            "text": "क्या आपको पहले से कोई बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "past_medical_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.576309Z"
+        },
+        {
+          "turn_id": 6,
+          "question": {
+            "id": "medications",
+            "text": "आप अभी कौन सी दवाएँ ले रहे हैं, अगर कोई हैं?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "medications",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.576918Z"
+        },
+        {
+          "turn_id": 7,
+          "question": {
+            "id": "allergies",
+            "text": "क्या आपको कोई ज्ञात एलर्जी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "not sure",
+          "extraction": {
+            "facts": [
+              {
+                "field": "allergies",
+                "value": null,
+                "status": "unknown",
+                "evidence": "not sure"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.577542Z"
+        },
+        {
+          "turn_id": 8,
+          "question": {
+            "id": "family_history",
+            "text": "क्या आपके परिवार में कोई संबंधित बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "family_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.578215Z"
+        },
+        {
+          "turn_id": 9,
+          "question": {
+            "id": "personal_history",
+            "text": "क्या अपनी आदतों या दिनचर्या के बारे में डॉक्टर को कुछ बताना चाहेंगे?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "skip",
+          "extraction": {
+            "facts": [
+              {
+                "field": "personal_history",
+                "value": null,
+                "status": "declined",
+                "evidence": "skip"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.579015Z"
+        }
+      ],
+      "completed": true,
+      "completion_reason": "collected",
+      "completed_at": "2026-09-05T19:50:44.579143Z",
+      "revision": 9
+    },
+    "final_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO1",
+      "interview_id": "INT_04d9ca4763024403bc5ccdd8615eb8cd",
+      "revision": 9,
+      "extracted": {
+        "facts": [
+          {
+            "field": "personal_history",
+            "value": null,
+            "status": "declined",
+            "evidence": "skip"
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "fever",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": null,
+        "location": null,
+        "temperature": "38 C",
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": false,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "missing_information": [],
+      "unknown_information": [
+        "allergies",
+        "personal_history"
+      ],
+      "next_question": null,
+      "priority_flags": [],
+      "completed": true,
+      "completion_reason": "collected"
+    }
+  },
+  "chest_pain": {
+    "first_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO2",
+      "interview_id": "INT_a72e15baf6f3486daebba525cd03287f",
+      "revision": 1,
+      "extracted": {
+        "facts": [
+          {
+            "field": "chief_complaint",
+            "value": "chest pain",
+            "status": "reported",
+            "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+          },
+          {
+            "field": "duration",
+            "value": "3 days",
+            "status": "reported",
+            "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+          },
+          {
+            "field": "breathlessness",
+            "value": true,
+            "status": "reported",
+            "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+          },
+          {
+            "field": "severity",
+            "value": 7,
+            "status": "reported",
+            "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "chest pain",
+        "hpi": null,
+        "duration": "3 days",
+        "severity": 7,
+        "location": null,
+        "temperature": null,
+        "breathlessness": true,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": null,
+        "medications": null,
+        "allergies": null,
+        "family_history": null,
+        "personal_history": null
+      },
+      "missing_information": [
+        "breathlessness_onset",
+        "location",
+        "hpi",
+        "past_medical_history",
+        "medications",
+        "allergies",
+        "family_history",
+        "personal_history"
+      ],
+      "unknown_information": [],
+      "next_question": {
+        "id": "breathlessness_onset",
+        "text": "साँस लेने की दिक्कत कब शुरू हुई?",
+        "type": "text",
+        "language": "hi",
+        "clarification": false
+      },
+      "priority_flags": [
+        {
+          "code": "CHEST_PAIN_WITH_BREATHLESSNESS",
+          "message": "Patient reports chest pain with breathing difficulty. Alert hospital staff for prompt review.",
+          "source": "prototype_rule",
+          "evidence_fields": [
+            "chief_complaint",
+            "breathlessness"
+          ]
+        }
+      ],
+      "completed": false,
+      "completion_reason": null
+    },
+    "final_record": {
+      "schema_version": "1.0",
+      "interview_id": "INT_a72e15baf6f3486daebba525cd03287f",
+      "patient_id": "DEMO2",
+      "language": "hi",
+      "consent": true,
+      "consent_recorded_at": "2026-09-05T19:50:44.579415Z",
+      "clinical_state": {
+        "chief_complaint": "chest pain",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": 7,
+        "location": "center",
+        "temperature": null,
+        "breathlessness": true,
+        "breathlessness_onset": "2 hours",
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "chief_complaint": "chest pain",
+      "symptoms": [
+        {
+          "name": "chest pain",
+          "present": true,
+          "duration": "3 days",
+          "severity": 7
+        },
+        {
+          "name": "breathlessness",
+          "present": true,
+          "duration": null,
+          "severity": null
+        }
+      ],
+      "responses": [
+        {
+          "turn_id": 1,
+          "question": {
+            "id": "chief_complaint",
+            "text": "आज आपको किस परेशानी के कारण अस्पताल आना पड़ा?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10.",
+          "extraction": {
+            "facts": [
+              {
+                "field": "chief_complaint",
+                "value": "chest pain",
+                "status": "reported",
+                "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+              },
+              {
+                "field": "duration",
+                "value": "3 days",
+                "status": "reported",
+                "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+              },
+              {
+                "field": "breathlessness",
+                "value": true,
+                "status": "reported",
+                "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+              },
+              {
+                "field": "severity",
+                "value": 7,
+                "status": "reported",
+                "evidence": "Mujhe teen din se seene mein dard ho raha hai. I have breathlessness, 7/10."
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.579782Z"
+        },
+        {
+          "turn_id": 2,
+          "question": {
+            "id": "breathlessness_onset",
+            "text": "साँस लेने की दिक्कत कब शुरू हुई?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "2 hours",
+          "extraction": {
+            "facts": [
+              {
+                "field": "breathlessness_onset",
+                "value": "2 hours",
+                "status": "reported",
+                "evidence": "2 hours"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.580322Z"
+        },
+        {
+          "turn_id": 3,
+          "question": {
+            "id": "location",
+            "text": "दर्द कहाँ हो रहा है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "center",
+          "extraction": {
+            "facts": [
+              {
+                "field": "location",
+                "value": "center",
+                "status": "reported",
+                "evidence": "center"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.580805Z"
+        },
+        {
+          "turn_id": 4,
+          "question": {
+            "id": "hpi",
+            "text": "यह परेशानी कैसे शुरू हुई और कैसे बदली, बताइए।",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "it started gradually and comes and goes",
+          "extraction": {
+            "facts": [
+              {
+                "field": "hpi",
+                "value": "it started gradually and comes and goes",
+                "status": "reported",
+                "evidence": "it started gradually and comes and goes"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.581337Z"
+        },
+        {
+          "turn_id": 5,
+          "question": {
+            "id": "past_medical_history",
+            "text": "क्या आपको पहले से कोई बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "past_medical_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.581890Z"
+        },
+        {
+          "turn_id": 6,
+          "question": {
+            "id": "medications",
+            "text": "आप अभी कौन सी दवाएँ ले रहे हैं, अगर कोई हैं?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "medications",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.582474Z"
+        },
+        {
+          "turn_id": 7,
+          "question": {
+            "id": "allergies",
+            "text": "क्या आपको कोई ज्ञात एलर्जी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "not sure",
+          "extraction": {
+            "facts": [
+              {
+                "field": "allergies",
+                "value": null,
+                "status": "unknown",
+                "evidence": "not sure"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.583078Z"
+        },
+        {
+          "turn_id": 8,
+          "question": {
+            "id": "family_history",
+            "text": "क्या आपके परिवार में कोई संबंधित बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "family_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.583759Z"
+        },
+        {
+          "turn_id": 9,
+          "question": {
+            "id": "personal_history",
+            "text": "क्या अपनी आदतों या दिनचर्या के बारे में डॉक्टर को कुछ बताना चाहेंगे?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "skip",
+          "extraction": {
+            "facts": [
+              {
+                "field": "personal_history",
+                "value": null,
+                "status": "declined",
+                "evidence": "skip"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.584442Z"
+        }
+      ],
+      "completed": true,
+      "completion_reason": "collected",
+      "completed_at": "2026-09-05T19:50:44.584507Z",
+      "revision": 9
+    },
+    "final_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO2",
+      "interview_id": "INT_a72e15baf6f3486daebba525cd03287f",
+      "revision": 9,
+      "extracted": {
+        "facts": [
+          {
+            "field": "personal_history",
+            "value": null,
+            "status": "declined",
+            "evidence": "skip"
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "chest pain",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": 7,
+        "location": "center",
+        "temperature": null,
+        "breathlessness": true,
+        "breathlessness_onset": "2 hours",
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "missing_information": [],
+      "unknown_information": [
+        "allergies",
+        "personal_history"
+      ],
+      "next_question": null,
+      "priority_flags": [
+        {
+          "code": "CHEST_PAIN_WITH_BREATHLESSNESS",
+          "message": "Patient reports chest pain with breathing difficulty. Alert hospital staff for prompt review.",
+          "source": "prototype_rule",
+          "evidence_fields": [
+            "chief_complaint",
+            "breathlessness"
+          ]
+        }
+      ],
+      "completed": true,
+      "completion_reason": "collected"
+    }
+  },
+  "headache": {
+    "first_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO3",
+      "interview_id": "INT_57c53ed1ad93447299638d3c8a69abd2",
+      "revision": 1,
+      "extracted": {
+        "facts": [
+          {
+            "field": "chief_complaint",
+            "value": "headache",
+            "status": "reported",
+            "evidence": "मुझे तीन दिन से सिरदर्द है।"
+          },
+          {
+            "field": "duration",
+            "value": "3 days",
+            "status": "reported",
+            "evidence": "मुझे तीन दिन से सिरदर्द है।"
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "headache",
+        "hpi": null,
+        "duration": "3 days",
+        "severity": null,
+        "location": null,
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": null,
+        "medications": null,
+        "allergies": null,
+        "family_history": null,
+        "personal_history": null
+      },
+      "missing_information": [
+        "sudden_onset",
+        "severity",
+        "location",
+        "hpi",
+        "past_medical_history",
+        "medications",
+        "allergies",
+        "family_history",
+        "personal_history"
+      ],
+      "unknown_information": [],
+      "next_question": {
+        "id": "sudden_onset",
+        "text": "क्या सिरदर्द अचानक शुरू हुआ?",
+        "type": "text",
+        "language": "hi",
+        "clarification": false
+      },
+      "priority_flags": [],
+      "completed": false,
+      "completion_reason": null
+    },
+    "final_record": {
+      "schema_version": "1.0",
+      "interview_id": "INT_57c53ed1ad93447299638d3c8a69abd2",
+      "patient_id": "DEMO3",
+      "language": "hi",
+      "consent": true,
+      "consent_recorded_at": "2026-09-05T19:50:44.584691Z",
+      "clinical_state": {
+        "chief_complaint": "headache",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": 5,
+        "location": "forehead",
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": false,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "chief_complaint": "headache",
+      "symptoms": [
+        {
+          "name": "headache",
+          "present": true,
+          "duration": "3 days",
+          "severity": 5
+        }
+      ],
+      "responses": [
+        {
+          "turn_id": 1,
+          "question": {
+            "id": "chief_complaint",
+            "text": "आज आपको किस परेशानी के कारण अस्पताल आना पड़ा?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "मुझे तीन दिन से सिरदर्द है।",
+          "extraction": {
+            "facts": [
+              {
+                "field": "chief_complaint",
+                "value": "headache",
+                "status": "reported",
+                "evidence": "मुझे तीन दिन से सिरदर्द है।"
+              },
+              {
+                "field": "duration",
+                "value": "3 days",
+                "status": "reported",
+                "evidence": "मुझे तीन दिन से सिरदर्द है।"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.585007Z"
+        },
+        {
+          "turn_id": 2,
+          "question": {
+            "id": "sudden_onset",
+            "text": "क्या सिरदर्द अचानक शुरू हुआ?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "no",
+          "extraction": {
+            "facts": [
+              {
+                "field": "sudden_onset",
+                "value": false,
+                "status": "reported",
+                "evidence": "no"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.585482Z"
+        },
+        {
+          "turn_id": 3,
+          "question": {
+            "id": "severity",
+            "text": "० से १० में तकलीफ़ कितनी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "5",
+          "extraction": {
+            "facts": [
+              {
+                "field": "severity",
+                "value": 5,
+                "status": "reported",
+                "evidence": "5"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.586011Z"
+        },
+        {
+          "turn_id": 4,
+          "question": {
+            "id": "location",
+            "text": "दर्द कहाँ हो रहा है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "forehead",
+          "extraction": {
+            "facts": [
+              {
+                "field": "location",
+                "value": "forehead",
+                "status": "reported",
+                "evidence": "forehead"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.586481Z"
+        },
+        {
+          "turn_id": 5,
+          "question": {
+            "id": "hpi",
+            "text": "यह परेशानी कैसे शुरू हुई और कैसे बदली, बताइए।",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "it started gradually and comes and goes",
+          "extraction": {
+            "facts": [
+              {
+                "field": "hpi",
+                "value": "it started gradually and comes and goes",
+                "status": "reported",
+                "evidence": "it started gradually and comes and goes"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.586983Z"
+        },
+        {
+          "turn_id": 6,
+          "question": {
+            "id": "past_medical_history",
+            "text": "क्या आपको पहले से कोई बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "past_medical_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.587542Z"
+        },
+        {
+          "turn_id": 7,
+          "question": {
+            "id": "medications",
+            "text": "आप अभी कौन सी दवाएँ ले रहे हैं, अगर कोई हैं?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "medications",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.588115Z"
+        },
+        {
+          "turn_id": 8,
+          "question": {
+            "id": "allergies",
+            "text": "क्या आपको कोई ज्ञात एलर्जी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "not sure",
+          "extraction": {
+            "facts": [
+              {
+                "field": "allergies",
+                "value": null,
+                "status": "unknown",
+                "evidence": "not sure"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.588711Z"
+        },
+        {
+          "turn_id": 9,
+          "question": {
+            "id": "family_history",
+            "text": "क्या आपके परिवार में कोई संबंधित बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "family_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.589377Z"
+        },
+        {
+          "turn_id": 10,
+          "question": {
+            "id": "personal_history",
+            "text": "क्या अपनी आदतों या दिनचर्या के बारे में डॉक्टर को कुछ बताना चाहेंगे?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "skip",
+          "extraction": {
+            "facts": [
+              {
+                "field": "personal_history",
+                "value": null,
+                "status": "declined",
+                "evidence": "skip"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.590063Z"
+        }
+      ],
+      "completed": true,
+      "completion_reason": "collected",
+      "completed_at": "2026-09-05T19:50:44.590122Z",
+      "revision": 10
+    },
+    "final_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO3",
+      "interview_id": "INT_57c53ed1ad93447299638d3c8a69abd2",
+      "revision": 10,
+      "extracted": {
+        "facts": [
+          {
+            "field": "personal_history",
+            "value": null,
+            "status": "declined",
+            "evidence": "skip"
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "headache",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "3 days",
+        "severity": 5,
+        "location": "forehead",
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": false,
+        "vomiting": null,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "missing_information": [],
+      "unknown_information": [
+        "allergies",
+        "personal_history"
+      ],
+      "next_question": null,
+      "priority_flags": [],
+      "completed": true,
+      "completion_reason": "collected"
+    }
+  },
+  "abdominal_pain": {
+    "first_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO4",
+      "interview_id": "INT_7a1994a7ebad4a938cdb5965725b6326",
+      "revision": 1,
+      "extracted": {
+        "facts": [
+          {
+            "field": "chief_complaint",
+            "value": "abdominal pain",
+            "status": "reported",
+            "evidence": "I have abdominal pain for 2 days, 5/10."
+          },
+          {
+            "field": "duration",
+            "value": "2 days",
+            "status": "reported",
+            "evidence": "I have abdominal pain for 2 days, 5/10."
+          },
+          {
+            "field": "severity",
+            "value": 5,
+            "status": "reported",
+            "evidence": "I have abdominal pain for 2 days, 5/10."
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "abdominal pain",
+        "hpi": null,
+        "duration": "2 days",
+        "severity": 5,
+        "location": null,
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": null,
+        "past_medical_history": null,
+        "medications": null,
+        "allergies": null,
+        "family_history": null,
+        "personal_history": null
+      },
+      "missing_information": [
+        "location",
+        "vomiting",
+        "hpi",
+        "past_medical_history",
+        "medications",
+        "allergies",
+        "family_history",
+        "personal_history"
+      ],
+      "unknown_information": [],
+      "next_question": {
+        "id": "location",
+        "text": "दर्द कहाँ हो रहा है?",
+        "type": "text",
+        "language": "hi",
+        "clarification": false
+      },
+      "priority_flags": [],
+      "completed": false,
+      "completion_reason": null
+    },
+    "final_record": {
+      "schema_version": "1.0",
+      "interview_id": "INT_7a1994a7ebad4a938cdb5965725b6326",
+      "patient_id": "DEMO4",
+      "language": "hi",
+      "consent": true,
+      "consent_recorded_at": "2026-09-05T19:50:44.590297Z",
+      "clinical_state": {
+        "chief_complaint": "abdominal pain",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "2 days",
+        "severity": 5,
+        "location": "lower abdomen",
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": false,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "chief_complaint": "abdominal pain",
+      "symptoms": [
+        {
+          "name": "abdominal pain",
+          "present": true,
+          "duration": "2 days",
+          "severity": 5
+        },
+        {
+          "name": "vomiting",
+          "present": false,
+          "duration": null,
+          "severity": null
+        }
+      ],
+      "responses": [
+        {
+          "turn_id": 1,
+          "question": {
+            "id": "chief_complaint",
+            "text": "आज आपको किस परेशानी के कारण अस्पताल आना पड़ा?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "I have abdominal pain for 2 days, 5/10.",
+          "extraction": {
+            "facts": [
+              {
+                "field": "chief_complaint",
+                "value": "abdominal pain",
+                "status": "reported",
+                "evidence": "I have abdominal pain for 2 days, 5/10."
+              },
+              {
+                "field": "duration",
+                "value": "2 days",
+                "status": "reported",
+                "evidence": "I have abdominal pain for 2 days, 5/10."
+              },
+              {
+                "field": "severity",
+                "value": 5,
+                "status": "reported",
+                "evidence": "I have abdominal pain for 2 days, 5/10."
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.590618Z"
+        },
+        {
+          "turn_id": 2,
+          "question": {
+            "id": "location",
+            "text": "दर्द कहाँ हो रहा है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "lower abdomen",
+          "extraction": {
+            "facts": [
+              {
+                "field": "location",
+                "value": "lower abdomen",
+                "status": "reported",
+                "evidence": "lower abdomen"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.591081Z"
+        },
+        {
+          "turn_id": 3,
+          "question": {
+            "id": "vomiting",
+            "text": "क्या उल्टी हो रही है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "no",
+          "extraction": {
+            "facts": [
+              {
+                "field": "vomiting",
+                "value": false,
+                "status": "reported",
+                "evidence": "no"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.591536Z"
+        },
+        {
+          "turn_id": 4,
+          "question": {
+            "id": "hpi",
+            "text": "यह परेशानी कैसे शुरू हुई और कैसे बदली, बताइए।",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "it started gradually and comes and goes",
+          "extraction": {
+            "facts": [
+              {
+                "field": "hpi",
+                "value": "it started gradually and comes and goes",
+                "status": "reported",
+                "evidence": "it started gradually and comes and goes"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.592014Z"
+        },
+        {
+          "turn_id": 5,
+          "question": {
+            "id": "past_medical_history",
+            "text": "क्या आपको पहले से कोई बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "past_medical_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.592533Z"
+        },
+        {
+          "turn_id": 6,
+          "question": {
+            "id": "medications",
+            "text": "आप अभी कौन सी दवाएँ ले रहे हैं, अगर कोई हैं?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "medications",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.593082Z"
+        },
+        {
+          "turn_id": 7,
+          "question": {
+            "id": "allergies",
+            "text": "क्या आपको कोई ज्ञात एलर्जी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "not sure",
+          "extraction": {
+            "facts": [
+              {
+                "field": "allergies",
+                "value": null,
+                "status": "unknown",
+                "evidence": "not sure"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.593685Z"
+        },
+        {
+          "turn_id": 8,
+          "question": {
+            "id": "family_history",
+            "text": "क्या आपके परिवार में कोई संबंधित बीमारी है?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "none",
+          "extraction": {
+            "facts": [
+              {
+                "field": "family_history",
+                "value": [],
+                "status": "reported",
+                "evidence": "none"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.594320Z"
+        },
+        {
+          "turn_id": 9,
+          "question": {
+            "id": "personal_history",
+            "text": "क्या अपनी आदतों या दिनचर्या के बारे में डॉक्टर को कुछ बताना चाहेंगे?",
+            "type": "text",
+            "language": "hi",
+            "clarification": false
+          },
+          "original_statement": "skip",
+          "extraction": {
+            "facts": [
+              {
+                "field": "personal_history",
+                "value": null,
+                "status": "declined",
+                "evidence": "skip"
+              }
+            ],
+            "uncertain_fields": []
+          },
+          "recorded_at": "2026-09-05T19:50:44.595247Z"
+        }
+      ],
+      "completed": true,
+      "completion_reason": "collected",
+      "completed_at": "2026-09-05T19:50:44.595310Z",
+      "revision": 9
+    },
+    "final_response": {
+      "schema_version": "1.0",
+      "patient_id": "DEMO4",
+      "interview_id": "INT_7a1994a7ebad4a938cdb5965725b6326",
+      "revision": 9,
+      "extracted": {
+        "facts": [
+          {
+            "field": "personal_history",
+            "value": null,
+            "status": "declined",
+            "evidence": "skip"
+          }
+        ],
+        "uncertain_fields": []
+      },
+      "clinical_state": {
+        "chief_complaint": "abdominal pain",
+        "hpi": "it started gradually and comes and goes",
+        "duration": "2 days",
+        "severity": 5,
+        "location": "lower abdomen",
+        "temperature": null,
+        "breathlessness": null,
+        "breathlessness_onset": null,
+        "cough": null,
+        "sudden_onset": null,
+        "vomiting": false,
+        "past_medical_history": [],
+        "medications": [],
+        "allergies": null,
+        "family_history": [],
+        "personal_history": null
+      },
+      "missing_information": [],
+      "unknown_information": [
+        "allergies",
+        "personal_history"
+      ],
+      "next_question": null,
+      "priority_flags": [],
+      "completed": true,
+      "completion_reason": "collected"
+    }
+  }
+}

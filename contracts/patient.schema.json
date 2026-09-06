@@ -1,0 +1,64 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "patient_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Patient Id",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "age": {
+      "anyOf": [
+        {
+          "maximum": 130,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Age"
+    },
+    "gender": {
+      "default": "unknown",
+      "enum": [
+        "male",
+        "female",
+        "other",
+        "unknown"
+      ],
+      "title": "Gender",
+      "type": "string"
+    },
+    "language": {
+      "default": "en",
+      "enum": [
+        "en",
+        "hi"
+      ],
+      "title": "Language",
+      "type": "string"
+    }
+  },
+  "required": [
+    "patient_id"
+  ],
+  "title": "Patient",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

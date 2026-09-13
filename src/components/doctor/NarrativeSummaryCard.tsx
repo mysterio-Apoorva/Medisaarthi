@@ -41,16 +41,16 @@ export const NarrativeSummaryCard: React.FC<NarrativeSummaryCardProps> = ({
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900 tracking-tight">
-              AI-Assisted Pre-Consultation Summary
+              Structured Intake Narrative
             </h2>
             <p className="text-xs text-slate-500 font-medium">
-              Physician-oriented narrative synthesized from patient intake responses
+              Deterministic rendering of recorded facts for clinician review
             </p>
           </div>
         </div>
 
         <span className="text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-1 rounded-full">
-          Gemini 2.5 Flash
+          Recorded facts
         </span>
       </div>
 
@@ -58,7 +58,7 @@ export const NarrativeSummaryCard: React.FC<NarrativeSummaryCardProps> = ({
       <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5 font-medium">
         <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
         <span>
-          <strong>Pre-Consultation Clinical Disclaimer:</strong> {narrative.verification_note}
+          <strong>Review status:</strong> {narrative.verification_note?.replaceAll('_', ' ')}. This intake is not a diagnosis.
         </span>
       </div>
 

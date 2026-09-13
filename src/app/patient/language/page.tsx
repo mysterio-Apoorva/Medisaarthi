@@ -6,11 +6,13 @@ import { Language } from '@/types';
 import { PatientHeader } from '@/components/patient/PatientHeader';
 import { LanguageSelector } from '@/components/patient/LanguageSelector';
 import { Button } from '@/components/ui/Button';
-import { ArrowRight, Languages } from 'lucide-react';
+import { ArrowRight, Languages, Leaf, Stethoscope } from 'lucide-react';
+import type { CareMode } from '@/services/api';
 
 export default function LanguageSelectionPage() {
   const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState<Language>('hi');
+  const [careMode, setCareMode] = useState<CareMode>('MODERN');
 
   useEffect(() => {
     try {
@@ -18,12 +20,15 @@ export default function LanguageSelectionPage() {
       if (stored === 'en' || stored === 'hi') {
         setSelectedLanguage(stored);
       }
+      const storedMode = localStorage.getItem('medisaarthi_care_mode');
+      if (storedMode === 'MODERN' || storedMode === 'AYUSH') setCareMode(storedMode);
     } catch {}
   }, []);
 
   const handleContinue = () => {
     try {
       localStorage.setItem('medisaarthi_selected_lang', selectedLanguage);
+      localStorage.setItem('medisaarthi_care_mode', careMode);
     } catch {}
     router.push('/patient/consent');
   };
@@ -56,6 +61,14 @@ export default function LanguageSelectionPage() {
           selected={selectedLanguage}
           onSelect={(lang) => setSelectedLanguage(lang)}
         />
+
+        <section className="space-y-3" aria-labelledby="care-mode-heading">
+          <div className="text-center"><h2 id="care-mode-heading" className="font-bold text-slate-900">Choose the consultation history</h2><p className="mt-1 text-sm text-slate-600">AYUSH mode adds patient-reported Ayurveda history. It does not create a diagnosis.</p></div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={() => setCareMode('MODERN')} className={`min-h-24 rounded-2xl border-2 p-4 text-left transition ${careMode === 'MODERN' ? 'border-sky-600 bg-sky-50' : 'border-slate-200 bg-white hover:border-sky-300'}`} aria-pressed={careMode === 'MODERN'}><Stethoscope className="mb-2 h-5 w-5 text-sky-700" /><span className="block font-bold">Modern medicine</span><span className="text-xs text-slate-600">Structured medical history and safety questions.</span></button>
+            <button type="button" onClick={() => setCareMode('AYUSH')} className={`min-h-24 rounded-2xl border-2 p-4 text-left transition ${careMode === 'AYUSH' ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`} aria-pressed={careMode === 'AYUSH'}><Leaf className="mb-2 h-5 w-5 text-emerald-700" /><span className="block font-bold">AYUSH / Ayurveda</span><span className="text-xs text-slate-600">Also captures Dashavidha Pariksha and Ahara-Vihara history.</span></button>
+          </div>
+        </section>
 
         {/* Continue Button */}
         <div className="pt-4 max-w-md mx-auto w-full">

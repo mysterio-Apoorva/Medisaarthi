@@ -1,6 +1,5 @@
 import React from 'react';
 import { DashboardStats } from '@/types';
-import { CURRENT_DOCTOR } from '@/lib/mock-data';
 import { Users, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface DashboardHeaderProps {
@@ -60,11 +59,11 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-              Good morning, {CURRENT_DOCTOR.name}
+              Clinical review queue
             </h1>
           </div>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Pre-consultation clinical overview • {CURRENT_DOCTOR.hospital}
+            Persisted pre-consultation encounters assigned to your account
           </p>
         </div>
 

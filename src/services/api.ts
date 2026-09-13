@@ -1,357 +1,345 @@
-/**
- * Medisaarthi Frontend API Service Layer
- * Connects frontend directly to FastAPI backend.
- */
-import {
-  Patient,
-  PatientListItem,
-  BackendInterviewStartResponse,
-  BackendInterviewRespondResponse,
-  BackendInterviewVoiceResponse,
+/** Browser API client. All clinical decisions and authorization remain server-side. */
+import type {
   BackendInterviewDetailResponse,
-  DoctorSummaryResponse,
-  DoctorNarrativeResponse,
+  BackendInterviewRespondResponse,
+  BackendInterviewStartResponse,
   DoctorEditAuditItem,
+  DoctorNarrativeResponse,
   DoctorSummaryEditRequest,
   DoctorSummaryEditResponse,
+  DoctorSummaryResponse,
   DoctorSummaryVerifyResponse,
   Language,
+  Patient,
+  PatientListItem,
 } from '@/types';
-import { INITIAL_PATIENTS } from '@/lib/mock-data';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+export type CareMode = 'MODERN' | 'AYUSH';
 
-class ApiError extends Error {
-  status: number;
-  constructor(message: string, status: number) {
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string, public readonly data?: unknown) {
     super(message);
     this.name = 'ApiError';
-    this.status = status;
   }
+}
+
+type RecordValue = string | number | boolean | string[];
+type ClinicalFact = {
+  fact_id?: string;
+  field_name: string;
+  value: RecordValue;
+  source: string;
+  confidence: number;
+  status?: string;
+  evidence?: string | null;
+  created_at?: string;
+};
+type NewSummary = {
+  patient_snapshot: { patient_id: string; name: string; age: number; gender: string; preferred_language?: string; uhid?: string; phone?: string };
+  encounter: { encounter_id: string; status: string; language: Language; stage: string; revision: number; started_at?: string; completed_at?: string; finalized_at?: string; ai_provider: string } | null;
+  clinical_state: Record<string, RecordValue>;
+  facts: ClinicalFact[];
+  completion: { completion_percentage: number; missing: string[]; critical_missing: string[]; contradictions: string[] };
+  red_flags: { message: string; severity: string; rule_code: string; evidence: string[] }[];
+  narrative: string;
+  reconciliation: unknown[];
+  documents: unknown[];
+  timeline: { event_id: string; occurred_at: string; title: string; detail?: string; source: string; confidence: number; event_type: string }[];
+  verification_status: string;
+};
+
+function messageFrom(value: unknown, fallback: string): string {
+  if (typeof value === 'object' && value !== null && 'detail' in value) {
+    const detail = (value as { detail: unknown }).detail;
+    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'object' && detail !== null && 'message' in detail && typeof (detail as { message: unknown }).message === 'string') return (detail as { message: string }).message;
+  }
+  return fallback;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
-
+  let response: Response;
   try {
-    const res = await fetch(url, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       ...options,
-      headers,
+      credentials: 'include',
+      headers: { ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...options.headers },
     });
-
-    if (!res.ok) {
-      let errorDetail = `Request failed with status ${res.status}`;
-      try {
-        const errorJson = await res.json();
-        if (errorJson.detail) {
-          errorDetail = typeof errorJson.detail === 'string'
-            ? errorJson.detail
-            : JSON.stringify(errorJson.detail);
-        }
-      } catch {
-        // use default error message
-      }
-      throw new ApiError(errorDetail, res.status);
-    }
-
-    return await res.json();
-  } catch (err: any) {
-    if (err instanceof ApiError) {
-      throw err;
-    }
-    throw new ApiError(
-      err?.message || 'Unable to connect to Medisaarthi backend server. Please check your connection.',
-      0
-    );
-  }
-}
-
-/**
- * Fetch list of all patients registered in PostgreSQL
- */
-export async function getPatients(): Promise<Patient[]> {
-  try {
-    return await request<Patient[]>('/patients');
   } catch {
-    return INITIAL_PATIENTS;
+    throw new ApiError(0, 'Unable to reach the MediKiosk service. Confirm that the backend is running.');
   }
+  const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
+  if (!response.ok) throw new ApiError(response.status, messageFrom(body, `Request failed (${response.status})`), body);
+  return body as T;
 }
 
-/**
- * Fetch a single patient by ID from PostgreSQL
- */
+export type CurrentUser = { user_id: string; email: string; role: 'PATIENT' | 'DOCTOR' | 'ADMIN'; patient_id?: string | null; display_name: string };
+
+export async function login(email: string, password: string): Promise<CurrentUser> {
+  const response = await request<{ user: CurrentUser }>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  return response.user;
+}
+
+export async function logout(): Promise<void> { await request<void>('/auth/logout', { method: 'POST' }); }
+export async function getCurrentUser(): Promise<CurrentUser> { return (await request<{ user: CurrentUser }>('/auth/me')).user; }
+
+export async function registerPatient(payload: { name: string; age: number; gender: 'Male' | 'Female' | 'Other'; language: Language; email: string; password: string; phone?: string }): Promise<{ patient_id: string; user: CurrentUser }> {
+  return request('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function getPatients(): Promise<Patient[]> { return request<Patient[]>('/patients'); }
 export async function getPatient(patientId: string): Promise<Patient | null> {
-  try {
-    return await request<Patient>(`/patients/${encodeURIComponent(patientId)}`);
-  } catch (err: any) {
-    if (err?.status === 404) {
-      return null;
-    }
-    const fallback = INITIAL_PATIENTS.find(
-      (p) => p.patient_id.toLowerCase() === patientId.trim().toLowerCase()
-    );
-    return fallback || null;
-  }
+  try { return await request<Patient>(`/patients/${encodeURIComponent(patientId)}`); }
+  catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; }
 }
 
-/**
- * Start a pre-consultation interview session on the backend
- * POST /interview/start
- */
-export async function startInterviewSession(
-  patientId: string,
-  language: Language = 'hi'
-): Promise<BackendInterviewStartResponse> {
-  return await request<BackendInterviewStartResponse>('/interview/start', {
-    method: 'POST',
-    body: JSON.stringify({
-      patient_id: patientId,
-      language: language,
-    }),
-  });
+export async function recordConsent(patientId: string, consentType: 'CLINICAL_INTAKE' | 'DOCUMENT_PROCESSING' = 'CLINICAL_INTAKE'): Promise<{ consent_id: string }> {
+  return request('/interviews/consents', { method: 'POST', body: JSON.stringify({ patient_id: patientId, consent_type: consentType }) });
 }
 
-/**
- * Send patient response to backend for adaptive question progression & fact extraction
- * POST /interview/respond
- */
-export async function respondToInterviewSession(
-  interviewId: string,
-  message: string
-): Promise<BackendInterviewRespondResponse> {
-  return await request<BackendInterviewRespondResponse>('/interview/respond', {
-    method: 'POST',
-    body: JSON.stringify({
-      interview_id: interviewId,
-      message: message,
-    }),
-  });
+export async function startInterviewSession(patientId: string, language: Language, consentId?: string, careMode: CareMode = 'MODERN'): Promise<BackendInterviewStartResponse & { revision: number; completion?: unknown }> {
+  return request('/interviews/start', { method: 'POST', body: JSON.stringify({ patient_id: patientId, language, consent_id: consentId, care_mode: careMode }) });
 }
 
-/**
- * Send patient audio recording for Speech-to-Text transcription and interview progression
- * POST /interview/{interview_id}/voice
- */
-export async function sendVoiceInterviewAudio(
-  interviewId: string,
-  audioBlob: Blob,
-  filename: string = 'recording.webm'
-): Promise<BackendInterviewVoiceResponse> {
-  const formData = new FormData();
-  formData.append('audio', audioBlob, filename);
-
-  const url = `${API_BASE_URL}/interview/${encodeURIComponent(interviewId)}/voice`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!res.ok) {
-      let errorDetail = `Voice request failed with status ${res.status}`;
-      try {
-        const errorJson = await res.json();
-        if (errorJson.detail) {
-          errorDetail = typeof errorJson.detail === 'string'
-            ? errorJson.detail
-            : JSON.stringify(errorJson.detail);
-        }
-      } catch {}
-      throw new ApiError(errorDetail, res.status);
-    }
-
-    return await res.json();
-  } catch (err: any) {
-    if (err instanceof ApiError) {
-      throw err;
-    }
-    throw new ApiError(
-      err?.message || 'Unable to upload voice recording. Please check connection.',
-      0
-    );
-  }
+export type IntakeSnapshot = {
+  encounter_id: string; interview_id: string; patient_id: string; language: Language;
+  revision: number; status: string; clinical_state: Record<string, RecordValue>;
+  completion: { completion_percentage: number; missing: string[]; critical_missing: string[] };
+  priority_flags: { code: string; severity: string; message: string }[];
+  next_question: { id: string; text: string } | null; ai_warning?: string | null;
+  answers: { answer_id: string; question_text: string; answer_text: string; created_at: string }[];
+};
+export async function getIntakeSnapshot(id: string): Promise<IntakeSnapshot> {
+  return request(`/interviews/${encodeURIComponent(id)}`);
+}
+export async function transcribeInterviewAudio(id: string, audio: Blob, filename: string, revision: number, signal?: AbortSignal): Promise<{ transcript: string; revision: number }> {
+  const form = new FormData();
+  form.append('file', audio, filename);
+  form.append('expected_revision', String(revision));
+  return request(`/interviews/${encodeURIComponent(id)}/transcribe`, { method: 'POST', body: form, signal });
 }
 
-/**
- * Explicitly mark an interview completed on the backend
- * POST /interview/complete
- */
-export async function completeInterviewSession(
-  interviewId: string
-): Promise<{ interview_id: string; status: string; completed_at?: string }> {
-  return await request<{ interview_id: string; status: string; completed_at?: string }>(
-    '/interview/complete',
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        interview_id: interviewId,
-      }),
-    }
-  );
+export async function respondToInterviewSession(interviewId: string, message: string, expectedRevision?: number): Promise<BackendInterviewRespondResponse & { revision: number; clinical_state?: Record<string, RecordValue>; completion?: { completion_percentage: number }; ai_warning?: string | null }> {
+  const response = await request<{ encounter_id: string; status: string; extracted_facts: { field_name: string; value: RecordValue; source: string; confidence: number }[]; current_topic: string; next_question: { text: string; type: string } | null; interview_completed: boolean; revision: number; clinical_state: Record<string, RecordValue>; completion: { completion_percentage: number }; ai_warning?: string | null }>(`/interviews/${encodeURIComponent(interviewId)}/answers`, { method: 'POST', body: JSON.stringify({ message, expected_revision: expectedRevision }) });
+  return {
+    interview_id: response.encounter_id, status: response.status, received_message: message,
+    extracted_facts: response.extracted_facts.map((fact) => ({ field_name: fact.field_name, value: String(fact.value), status: fact.source })),
+    current_topic: response.current_topic,
+    next_question: response.next_question || { text: 'Your intake is ready for review.', type: 'text' },
+    interview_completed: response.interview_completed, revision: response.revision, clinical_state: response.clinical_state, completion: response.completion, ai_warning: response.ai_warning,
+  };
 }
 
-/**
- * Retrieve interview session details and history
- * GET /interview/{interview_id}
- */
-export async function getInterviewDetail(
-  interviewId: string
-): Promise<BackendInterviewDetailResponse> {
-  return await request<BackendInterviewDetailResponse>(`/interview/${encodeURIComponent(interviewId)}`);
+export async function completeInterviewSession(interviewId: string, expectedRevision?: number, reviewed = false): Promise<{ interview_id: string; status: string }> {
+  const response = await request<{ encounter_id: string; status: string }>(`/interviews/${encodeURIComponent(interviewId)}/submit`, { method: 'POST', body: JSON.stringify({ expected_revision: expectedRevision, reviewed }) });
+  return { interview_id: response.encounter_id, status: response.status };
 }
 
-/**
- * Fetch doctor's pre-consultation patient queue
- * GET /doctor/patients
- */
+export async function correctPatientFact(id: string, field: string, value: RecordValue, revision: number): Promise<void> {
+  await request(`/interviews/${encodeURIComponent(id)}/corrections`, { method: 'POST', body: JSON.stringify({ field_name: field, value, expected_revision: revision }) });
+}
+
+export type DocumentUploadResult = {
+  document_id: string;
+  processing_status: 'PROCESSED' | 'NEEDS_REVIEW' | 'FAILED';
+  classification: string;
+  extracted_count: number;
+  confidence: number;
+  error_code?: string | null;
+};
+
+export type EncounterDocument = {
+  document_id: string;
+  original_name: string;
+  processing_status: 'PROCESSED' | 'NEEDS_REVIEW' | 'FAILED';
+  classification?: string | null;
+  classification_confidence?: number | null;
+  document_date?: string | null;
+  entity_count?: number;
+  error_code?: string | null;
+  processing_detail_json?: string | null;
+};
+export type DocumentExtraction = {
+  document_id: string;
+  status: string;
+  classification?: string | null;
+  classification_confidence?: number | null;
+  document_date?: string | null;
+  processing_steps: string[];
+  text?: string | null;
+  facts: { field_name: string; value: string[]; evidence: string; page_numbers?: number[] }[];
+  pages: { page_number: number; raw_text: string; extraction_method: string; confidence: number }[];
+  entities: { entity_id: string; entity_type: string; field_name?: string | null; value: string; evidence: string; page_number: number; confidence: number; verification_status: string; abnormal_status?: 'LOW' | 'HIGH' | 'NORMAL' | null }[];
+  review?: { summary: string; abnormal_results: string[]; requires_physician_verification: string[] };
+  match_results?: { field_name: string; status: 'CONSISTENT' | 'NEW_CANDIDATE' | 'CONFLICT_REQUIRES_REVIEW'; page_numbers: number[] }[];
+  requires_clinician_review: boolean;
+};
+
+export async function uploadEncounterDocument(interviewId: string, file: File): Promise<DocumentUploadResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  return request<DocumentUploadResult>(`/documents/encounters/${encodeURIComponent(interviewId)}`, { method: 'POST', body: form });
+}
+export async function listEncounterDocuments(interviewId: string): Promise<EncounterDocument[]> {
+  return request(`/documents/encounters/${encodeURIComponent(interviewId)}`);
+}
+export async function getDocumentExtraction(documentId: string): Promise<DocumentExtraction> {
+  return request(`/documents/${encodeURIComponent(documentId)}/extraction`);
+}
+export async function retryDocumentProcessing(documentId: string): Promise<DocumentUploadResult> {
+  return request(`/documents/${encodeURIComponent(documentId)}/retry`, { method: 'POST' });
+}
+export async function deleteEncounterDocument(documentId: string): Promise<void> {
+  await request<void>(`/documents/${encodeURIComponent(documentId)}`, { method: 'DELETE' });
+}
+
+export async function sendVoiceInterviewAudio(interviewId: string, audio: Blob, filename = 'recording.webm', expectedRevision?: number): Promise<BackendInterviewRespondResponse & { transcript: string; revision: number; ai_warning?: string | null }> {
+  if (!audio.size) throw new ApiError(422, 'The microphone recording is empty. Please record your answer again.');
+  const form = new FormData();
+  form.append('file', audio, filename);
+  if (expectedRevision !== undefined) form.append('expected_revision', String(expectedRevision));
+  const response = await request<{ encounter_id: string; status: string; extracted_facts: { field_name: string; value: RecordValue; source: string; confidence: number }[]; current_topic: string; next_question: { text: string; type: string } | null; interview_completed: boolean; revision: number; transcript: string; ai_warning?: string | null }>(`/interviews/${encodeURIComponent(interviewId)}/voice`, { method: 'POST', body: form });
+  return {
+    interview_id: response.encounter_id,
+    status: response.status,
+    received_message: response.transcript,
+    transcript: response.transcript,
+    extracted_facts: response.extracted_facts.map((fact) => ({ field_name: fact.field_name, value: String(fact.value), status: fact.source })),
+    current_topic: response.current_topic,
+    next_question: response.next_question || { text: 'Your intake is ready for review.', type: 'text' },
+    interview_completed: response.interview_completed,
+    revision: response.revision,
+    ai_warning: response.ai_warning,
+  };
+}
+
+export async function getInterviewDetail(interviewId: string): Promise<BackendInterviewDetailResponse> {
+  const response = await request<{ encounter_id: string; patient_id: string; status: string; encounter: { language: Language; stage: string; started_at?: string; completed_at?: string }; answers: { answer_id: string; question_text: string; answer_text: string; created_at: string }[] }>(`/interviews/${encodeURIComponent(interviewId)}`);
+  return { interview_id: response.encounter_id, patient_id: response.patient_id, status: response.status, language: response.encounter.language, current_topic: response.encounter.stage, started_at: response.encounter.started_at, completed_at: response.encounter.completed_at, messages: response.answers.flatMap((answer, index) => [{ id: index * 2 + 1, interview_id: response.encounter_id, role: 'assistant', text: answer.question_text, language: response.encounter.language, timestamp: answer.created_at }, { id: index * 2 + 2, interview_id: response.encounter_id, role: 'patient', text: answer.answer_text, language: response.encounter.language, timestamp: answer.created_at }]) };
+}
+
 export async function getDoctorPatients(): Promise<PatientListItem[]> {
-  return await request<PatientListItem[]>('/doctor/patients');
+  const rows = await request<Array<PatientListItem & { priority: string }>>('/doctor/patients');
+  return rows.map((row) => ({ ...row, priority: row.priority === 'EMERGENCY' || row.priority === 'HIGH' ? 'Urgent' : row.priority === 'MODERATE' ? 'Priority' : 'Normal', status: row.status === 'SUBMITTED' ? 'Ready for review' : row.status === 'FINALIZED' ? 'Verified' : row.status }));
 }
 
-/**
- * Fetch doctor structured summary for a patient
- * GET /doctor/patients/{patient_id}/summary
- */
-export async function getDoctorSummary(
-  patientId: string
-): Promise<DoctorSummaryResponse | null> {
-  try {
-    return await request<DoctorSummaryResponse>(
-      `/doctor/patients/${encodeURIComponent(patientId)}/summary`
-    );
-  } catch (err: any) {
-    if (err?.status === 404) return null;
-    throw err;
+function summaryAdapter(summary: NewSummary): DoctorSummaryResponse {
+  const state = summary.clinical_state;
+  const list = (field: string): string[] => Array.isArray(state[field]) ? state[field] as string[] : [];
+  const value = (field: string): string | undefined => state[field] === undefined ? undefined : String(state[field]);
+  const provenance = (field: string) => summary.facts.find(fact => fact.field_name === field);
+  return {
+    patient_snapshot: { ...summary.patient_snapshot, preferred_language: summary.patient_snapshot.preferred_language, registration_time: undefined },
+    current_complaint: { chief_complaint: value('chief_complaint'), duration: value('duration'), severity: value('severity'), location: value('location'), trigger: value('exertion'), associated_symptoms: Object.entries(state).filter(([field, item]) => ['breathlessness', 'sweating', 'nausea', 'vomiting', 'cough', 'fever'].includes(field) && item === true).map(([field]) => field.replace('_', ' ')).join(', '), facts: summary.facts.map((fact) => ({ field_name: fact.field_name, value: String(fact.value), status: fact.status || 'reported', source: fact.source, confidence: fact.confidence })) },
+    past_medical_history: list('past_medical_history').map((condition) => ({ condition, source: provenance('past_medical_history')?.source, confidence: provenance('past_medical_history')?.confidence })),
+    medications: list('medications').map((name) => ({ name, source: provenance('medications')?.source })),
+    allergies: list('allergies').map((allergen) => ({ allergen, source: provenance('allergies')?.source })),
+    allergy_status: state.allergies !== undefined && list('allergies').length === 0 ? 'No known allergies reported' : state.allergies === undefined ? 'No allergy information recorded' : 'Allergy information reported',
+    important_findings: summary.red_flags.map((flag) => ({ finding: flag.rule_code, value: flag.message, category: 'Safety rule', status: flag.severity })),
+    missing_information: summary.completion.missing.map((field) => ({ field_name: field, description: field.replaceAll('_', ' '), importance: summary.completion.critical_missing.includes(field) ? 'critical' : 'standard' })),
+    priority_flags: summary.red_flags.map((flag) => flag.message),
+    interview_metadata: { interview_id: summary.encounter?.encounter_id, status: summary.encounter?.status || 'NO_ENCOUNTER', language: summary.encounter?.language, started_at: summary.encounter?.started_at, completed_at: summary.encounter?.completed_at, current_topic: summary.encounter?.stage },
+    verification_status: summary.verification_status,
+  };
+}
+
+async function rawDoctorSummary(patientId: string): Promise<NewSummary> { return request<NewSummary>(`/doctor/patients/${encodeURIComponent(patientId)}/summary`); }
+export async function getDoctorSummary(patientId: string): Promise<DoctorSummaryResponse | null> { try { return summaryAdapter(await rawDoctorSummary(patientId)); } catch (error) { if (error instanceof ApiError && error.status === 404) return null; throw error; } }
+export async function getDoctorNarrative(patientId: string): Promise<DoctorNarrativeResponse | null> {
+  const summary = await rawDoctorSummary(patientId);
+  const recordedList = (field: string) => {
+    const value = summary.clinical_state[field];
+    return Array.isArray(value) ? value.map(String).join(', ') || 'None reported' : 'Not recorded';
+  };
+  return {
+    patient_id: patientId,
+    patient_snapshot: `${summary.patient_snapshot.name}, ${summary.patient_snapshot.age} years`,
+    presenting_complaint: String(summary.clinical_state.chief_complaint || 'Not recorded'),
+    interview_summary: summary.narrative,
+    relevant_history: recordedList('past_medical_history'),
+    medications: recordedList('medications'),
+    allergies: recordedList('allergies'),
+    important_findings: summary.red_flags.map((flag) => flag.message).join(' ') || 'No active deterministic safety rule',
+    missing_information: summary.completion.missing.join(', ') || 'No required fields missing',
+    priority_flags: summary.red_flags.map((flag) => flag.message).join(' ') || 'None',
+    verification_note: summary.verification_status,
+  };
+}
+
+export async function updateDoctorSummary(patientId: string, changes: DoctorSummaryEditRequest): Promise<DoctorSummaryEditResponse> {
+  const normalized: Array<[string, RecordValue]> = [];
+  if (changes.chief_complaint !== undefined) normalized.push(['chief_complaint', changes.chief_complaint]);
+  if (changes.duration !== undefined) normalized.push(['duration', changes.duration]);
+  if (changes.severity !== undefined) normalized.push(['severity', changes.severity]);
+  if (changes.location !== undefined) normalized.push(['location', changes.location]);
+  if (changes.trigger !== undefined) normalized.push(['exertion', changes.trigger]);
+  if (changes.past_medical_history !== undefined) normalized.push(['past_medical_history', changes.past_medical_history.map((item) => item.condition).filter(Boolean)]);
+  if (changes.medications !== undefined) normalized.push(['medications', changes.medications.map((item) => [item.name, item.dosage, item.frequency].filter(Boolean).join(' — ')).filter(Boolean)]);
+  if (changes.allergies !== undefined) normalized.push(['allergies', changes.allergies.map((item) => [item.allergen, item.reaction].filter(Boolean).join(' — ')).filter(Boolean)]);
+  const auditEntries: DoctorEditAuditItem[] = [];
+  for (const [fieldName, value] of normalized) {
+    const response = await request<{ fact_id: string; field_name: string; previous_value: RecordValue | null; value: RecordValue }>(`/doctor/patients/${encodeURIComponent(patientId)}/facts`, { method: 'POST', body: JSON.stringify({ field_name: fieldName, value, reason: 'Clinician correction from dashboard' }) });
+    auditEntries.push({ audit_id: response.fact_id, patient_id: patientId, field_name: response.field_name, original_value: response.previous_value === null ? null : String(response.previous_value), corrected_value: String(response.value), changed_by: 'Authenticated clinician', changed_at: new Date().toISOString() });
   }
+  return { patient_id: patientId, updated_fields: auditEntries.map((entry) => entry.field_name), verification_status: 'DOCTOR_REVIEW_REQUIRED', audit_entries: auditEntries };
 }
 
-/**
- * Fetch doctor narrative summary generated by Gemini / fallback
- * GET /doctor/patients/{patient_id}/summary/narrative
- */
-export async function getDoctorNarrative(
-  patientId: string
-): Promise<DoctorNarrativeResponse | null> {
-  try {
-    return await request<DoctorNarrativeResponse>(
-      `/doctor/patients/${encodeURIComponent(patientId)}/summary/narrative`
-    );
-  } catch (err: any) {
-    if (err?.status === 404) return null;
-    throw err;
-  }
+export async function verifyDoctorSummary(patientId: string, followUp?: { treatmentPlan?: string; followUpAt?: string }): Promise<DoctorSummaryVerifyResponse> {
+  const summary = await rawDoctorSummary(patientId);
+  if (!summary.encounter) throw new ApiError(409, 'No encounter is available to finalize.');
+  const response = await request<{ finalized_by: string; finalized_at: string }>(`/doctor/encounters/${encodeURIComponent(summary.encounter.encounter_id)}/finalize`, { method: 'POST', body: JSON.stringify({ treatment_plan: followUp?.treatmentPlan || null, follow_up_at: followUp?.followUpAt || null }) });
+  return { patient_id: patientId, verification_status: 'FINALIZED', verified_by: response.finalized_by, verified_at: response.finalized_at };
 }
 
-/**
- * Update clinical summary fields with immutable audit tracking
- * PATCH /doctor/patients/{patient_id}/summary
- */
-export async function updateDoctorSummary(
-  patientId: string,
-  changes: DoctorSummaryEditRequest,
-  doctorId: string = 'doctor_demo'
-): Promise<DoctorSummaryEditResponse> {
-  return await request<DoctorSummaryEditResponse>(
-    `/doctor/patients/${encodeURIComponent(patientId)}/summary`,
-    {
-      method: 'PATCH',
-      headers: {
-        'X-Doctor-ID': doctorId,
-      },
-      body: JSON.stringify(changes),
-    }
-  );
+export async function getDoctorAudit(patientId: string): Promise<DoctorEditAuditItem[]> {
+  const rows = await request<Array<{ audit_id: string; resource_id: string; action: string; metadata: { field?: string; from?: RecordValue | null; to?: RecordValue }; created_at: string; actor_user_id?: string }>>(`/doctor/patients/${encodeURIComponent(patientId)}/audit`);
+  return rows.filter((row) => row.action === 'DOCTOR_CORRECTED_FACT').map((row) => ({ audit_id: row.audit_id, patient_id: patientId, field_name: row.metadata.field || 'clinical_fact', original_value: row.metadata.from === null || row.metadata.from === undefined ? null : String(row.metadata.from), corrected_value: row.metadata.to === undefined ? null : String(row.metadata.to), changed_by: row.actor_user_id || 'Authenticated clinician', changed_at: row.created_at }));
 }
 
-/**
- * Mark clinical summary as doctor-verified
- * POST /doctor/patients/{patient_id}/summary/verify
- */
-export async function verifyDoctorSummary(
-  patientId: string,
-  doctorId: string = 'doctor_demo'
-): Promise<DoctorSummaryVerifyResponse> {
-  return await request<DoctorSummaryVerifyResponse>(
-    `/doctor/patients/${encodeURIComponent(patientId)}/summary/verify`,
-    {
-      method: 'POST',
-      headers: {
-        'X-Doctor-ID': doctorId,
-      },
-    }
-  );
+export type FollowUpQuestion = { id: string; text: string };
+export type FollowUpAlert = { follow_up_alert_id: string; severity: 'MODERATE' | 'HIGH' | 'EMERGENCY'; message: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED'; created_at: string; evidence?: string[] };
+export type FollowUpSession = { follow_up_session_id: string; follow_up_plan_id: string; patient_id: string; status: 'ACTIVE' | 'COMPLETED'; revision: number; risk_level: 'LOW' | 'MODERATE' | 'HIGH' | 'EMERGENCY'; started_at: string; completed_at?: string | null };
+export type FollowUpCheckIn = {
+  plan: { follow_up_plan_id: string; patient_id: string; encounter_id: string; instructions?: string | null; follow_up_at?: string | null; status: string; created_at: string };
+  session: FollowUpSession;
+  record_context: { chief_complaint?: string; medications: string[]; allergies: string[]; doctor_instructions: string };
+  responses: { follow_up_response_id: string; question_id: string; question_text: string; response_text: string; source: string; created_at: string }[];
+  next_question: FollowUpQuestion | null;
+  alerts: FollowUpAlert[];
+  resumed?: boolean;
+};
+export type FollowUpPlanOverview = { plan: FollowUpCheckIn['plan']; sessions: FollowUpSession[]; alerts: FollowUpAlert[]; last_check_in: FollowUpSession | null };
+export async function getPatientFollowUps(patientId: string): Promise<FollowUpPlanOverview[]> {
+  return request(`/follow-ups/patients/${encodeURIComponent(patientId)}`);
 }
+export async function startFollowUpCheckIn(planId: string): Promise<FollowUpCheckIn> {
+  return request(`/follow-ups/plans/${encodeURIComponent(planId)}/sessions`, { method: 'POST' });
+}
+export async function answerFollowUp(sessionId: string, questionId: string, message: string, expectedRevision: number): Promise<FollowUpCheckIn> {
+  return request(`/follow-ups/sessions/${encodeURIComponent(sessionId)}/answers`, { method: 'POST', body: JSON.stringify({ question_id: questionId, message, expected_revision: expectedRevision }) });
+}
+export async function transcribeFollowUpAudio(sessionId: string, audio: Blob, filename: string, revision: number): Promise<{ transcript: string; revision: number }> {
+  const form = new FormData();
+  form.append('file', audio, filename);
+  form.append('expected_revision', String(revision));
+  return request(`/follow-ups/sessions/${encodeURIComponent(sessionId)}/transcribe`, { method: 'POST', body: form });
+}
+export async function acknowledgeFollowUpAlert(alertId: string): Promise<{ follow_up_alert_id: string; status: string }> {
+  return request(`/follow-ups/alerts/${encodeURIComponent(alertId)}/acknowledge`, { method: 'POST' });
+}
+export type AdminUser = { user_id: string; email: string; role: 'PATIENT' | 'DOCTOR' | 'ADMIN'; display_name: string; patient_id?: string | null; created_at: string };
+export type AdminAudit = { audit_id: string; action: string; resource_type: string; resource_id: string; actor_user_id?: string | null; created_at: string; metadata: Record<string, unknown> };
+export type AdminOntology = { built_in: Record<string, unknown>; custom: Array<{ rule_id: string; concept: string; payload: Record<string, unknown>; enabled: number | boolean; updated_at: string }> };
 
-/**
- * Retrieve doctor correction audit history
- * GET /doctor/patients/{patient_id}/summary/audit
- */
-export async function getDoctorAudit(
-  patientId: string
-): Promise<DoctorEditAuditItem[]> {
-  try {
-    return await request<DoctorEditAuditItem[]>(
-      `/doctor/patients/${encodeURIComponent(patientId)}/summary/audit`
-    );
-  } catch (err: any) {
-    if (err?.status === 404) return [];
-    throw err;
-  }
+export async function getAdminUsers(): Promise<AdminUser[]> { return request<AdminUser[]>('/admin/users'); }
+export async function updateAdminUserRole(userId: string, role: AdminUser['role']): Promise<{ user_id: string; role: AdminUser['role'] }> {
+  return request(`/admin/users/${encodeURIComponent(userId)}/role`, { method: 'PUT', body: JSON.stringify({ role }) });
 }
-
-/**
- * Backward compatibility helpers for doctor UI dashboard
- */
-export async function getClinicalSummary(patientId: string): Promise<any> {
-  const summary = await getDoctorSummary(patientId);
-  if (summary) return summary;
-  return null;
+export async function getAdminAudits(): Promise<AdminAudit[]> { return request<AdminAudit[]>('/admin/audit-logs'); }
+export async function getAdminOntology(): Promise<AdminOntology> { return request<AdminOntology>('/admin/ontology'); }
+export async function saveAdminOntologyRule(ruleId: string, payload: { concept: string; payload: Record<string, unknown>; enabled: boolean }): Promise<{ rule_id: string; concept: string; enabled: boolean }> {
+  return request(`/admin/ontology/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
-
-export async function approveSummary(patientId: string, doctorNotes?: string): Promise<any> {
-  return await verifyDoctorSummary(patientId, 'doctor_demo');
-}
-
-export async function updatePatientSummary(patientId: string, data: any): Promise<any> {
-  return await updateDoctorSummary(patientId, data, 'doctor_demo');
-}
-
-export async function getDashboardStats(): Promise<any> {
-  try {
-    const list = await getDoctorPatients();
-    const verifiedCount = list.filter((p) => p.status === 'Verified').length;
-    const priorityCount = list.filter((p) => p.priority === 'Priority' || p.priority === 'Urgent').length;
-    return {
-      patientsWaiting: list.length,
-      interviewsCompleted: list.length,
-      needsReview: list.length - verifiedCount,
-      priorityReviews: priorityCount,
-    };
-  } catch {
-    return {
-      patientsWaiting: 1,
-      interviewsCompleted: 1,
-      needsReview: 1,
-      priorityReviews: 0,
-    };
-  }
-}
-
-export async function completeInterview(patientId: string, extracted: any, transcript: any): Promise<any> {
-  return { patient_id: patientId, status: 'Completed' };
-}
-
-export function resetDemoData(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem('medisaarthi_current_patient_id');
-    localStorage.removeItem('medisaarthi_selected_lang');
-    localStorage.removeItem('medisaarthi_consent_given');
-    localStorage.removeItem('medisaarthi_current_interview_id');
-  } catch {}
-}
+export async function getDashboardStats() { const patients = await getDoctorPatients(); return { patientsWaiting: patients.length, interviewsCompleted: patients.filter((patient) => patient.status === 'Ready for review' || patient.status === 'Verified').length, needsReview: patients.filter((patient) => patient.status === 'Ready for review').length, priorityReviews: patients.filter((patient) => patient.priority !== 'Normal').length }; }
+export function resetDemoData(): void { if (typeof window !== 'undefined') window.sessionStorage.clear(); }

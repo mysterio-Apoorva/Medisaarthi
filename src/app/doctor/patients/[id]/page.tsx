@@ -19,6 +19,7 @@ import {
 import { PatientProfileHeader } from '@/components/doctor/PatientProfileHeader';
 import { NarrativeSummaryCard } from '@/components/doctor/NarrativeSummaryCard';
 import { StructuredClinicalData } from '@/components/doctor/StructuredClinicalData';
+import { EncounterReviewPanel } from '@/components/doctor/EncounterReviewPanel';
 import { DoctorAuditTrail } from '@/components/doctor/DoctorAuditTrail';
 import { EditSummaryModal } from '@/components/doctor/EditSummaryModal';
 import { VerifyConfirmModal } from '@/components/doctor/VerifyConfirmModal';
@@ -127,12 +128,12 @@ export default function DoctorPatientProfilePage({
   };
 
   // Handle Verification Confirm
-  const handleVerifyConfirm = async () => {
+  const handleVerifyConfirm = async (followUp: { treatmentPlan?: string; followUpAt?: string }) => {
     if (!summary) return;
     setIsVerifying(true);
 
     try {
-      const res = await verifyDoctorSummary(summary.patient_snapshot.patient_id, 'doctor_demo');
+      const res = await verifyDoctorSummary(summary.patient_snapshot.patient_id, followUp);
       setIsVerifying(false);
       setIsVerifyModalOpen(false);
 
@@ -149,7 +150,7 @@ export default function DoctorPatientProfilePage({
     return (
       <div className="min-h-screen p-8 flex flex-col items-center justify-center space-y-4 bg-slate-50 text-slate-900">
         <div className="w-12 h-12 border-4 border-sky-600 border-t-transparent rounded-full animate-spin" />
-        <p className="text-base font-bold text-slate-800">Loading patient chart #{patientId} from PostgreSQL...</p>
+        <p className="text-base font-bold text-slate-800">Loading patient chart #{patientId}...</p>
       </div>
     );
   }
@@ -225,6 +226,7 @@ export default function DoctorPatientProfilePage({
 
         {/* 3. Underlying Structured Clinical Facts Section */}
         <StructuredClinicalData summary={summary} />
+        <EncounterReviewPanel patientId={patientId} onChange={loadAllData} />
 
         {/* 4. Doctor Edit History & Audit Trail */}
         <DoctorAuditTrail auditEntries={auditEntries} />
@@ -255,9 +257,9 @@ export default function DoctorPatientProfilePage({
         patient={{
           patient_id: summary.patient_snapshot.patient_id,
           name: summary.patient_snapshot.name,
-          age: summary.patient_snapshot.age || 48,
-          gender: (summary.patient_snapshot.gender as any) || 'Male',
-          language: (summary.patient_snapshot.preferred_language as any) || 'hi',
+          age: summary.patient_snapshot.age ?? 0,
+          gender: (summary.patient_snapshot.gender as any) || 'Other',
+          language: (summary.patient_snapshot.preferred_language as any) || 'en',
         }}
         transcript={
           interviewDetail?.messages?.map((m) => ({
@@ -271,7 +273,7 @@ export default function DoctorPatientProfilePage({
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-4 px-6 text-center text-xs text-slate-500">
-        Medisaarthi Physician Dashboard • Attending: Dr. Demo • Clinical review and verification is required prior to diagnosis.
+        Medisaarthi Physician Dashboard • Clinical review and verification are required before diagnosis.
       </footer>
     </div>
   );

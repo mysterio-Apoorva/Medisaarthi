@@ -41,7 +41,7 @@ export const ConsentCard: React.FC<ConsentCardProps> = ({
           <Lock className="w-5 h-5 text-sky-600 shrink-0 mt-0.5" />
           <div className="text-xs">
             <span className="font-semibold text-slate-900 block">
-              {isHindi ? '100% सुरक्षित और गोपनीय' : '100% Private & Confidential'}
+              {isHindi ? 'सीमित और अधिकृत पहुँच' : 'Access restricted to authorized users'}
             </span>
             <span className="text-slate-500 mt-0.5 block leading-relaxed">
               {isHindi

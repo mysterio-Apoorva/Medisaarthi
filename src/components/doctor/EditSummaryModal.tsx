@@ -35,7 +35,7 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
     summary.past_medical_history?.map((h) => ({ condition: h.condition, date: h.date || '' })) || []
   );
   const [medications, setMedications] = useState(
-    summary.medications?.map((m) => ({ name: m.name, dosage: m.dosage, frequency: m.frequency || '' })) || []
+    summary.medications?.map((m) => ({ name: m.name, dosage: m.dosage || '', frequency: m.frequency || '' })) || []
   );
   const [allergies, setAllergies] = useState(
     summary.allergies?.map((a) => ({ allergen: a.allergen, reaction: a.reaction || '' })) || []
@@ -56,7 +56,7 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
         summary.past_medical_history?.map((h) => ({ condition: h.condition, date: h.date || '' })) || []
       );
       setMedications(
-        summary.medications?.map((m) => ({ name: m.name, dosage: m.dosage, frequency: m.frequency || '' })) || []
+        summary.medications?.map((m) => ({ name: m.name, dosage: m.dosage || '', frequency: m.frequency || '' })) || []
       );
       setAllergies(
         summary.allergies?.map((a) => ({ allergen: a.allergen, reaction: a.reaction || '' })) || []
@@ -96,7 +96,7 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
     };
 
     try {
-      const res = await updateDoctorSummary(summary.patient_snapshot.patient_id, editPayload, 'doctor_demo');
+      const res = await updateDoctorSummary(summary.patient_snapshot.patient_id, editPayload);
       setIsSaving(false);
       onSaveSuccess(res.updated_fields);
       onClose();
@@ -120,7 +120,7 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
     >
       <form onSubmit={handleSubmit} className="space-y-4" id="doctor-edit-form">
         <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl text-xs text-sky-900 leading-relaxed font-medium">
-          As the attending physician (Dr. Demo), your corrections become the authoritative structured values in PostgreSQL and will generate an immutable audit trail entry.
+          Your corrections create a verified fact version and a recorded audit event.
         </div>
 
         {errorMessage && (

@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
-import { ShieldCheck, HeartPulse, Stethoscope } from 'lucide-react';
+import { ShieldCheck, Stethoscope } from 'lucide-react';
+import { MediKioskLogo } from '@/components/brand/MediKioskLogo';
 
 interface PatientHeaderProps {
   currentStep?: number;
@@ -20,13 +21,11 @@ export const PatientHeader: React.FC<PatientHeaderProps> = ({
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="w-9 h-9 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-xs group-hover:bg-sky-700 transition-colors">
-            <HeartPulse className="w-5 h-5" />
-          </div>
+          <MediKioskLogo className="h-9 w-9 shrink-0 transition-transform group-hover:scale-105" />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="font-bold text-slate-900 tracking-tight text-lg leading-none">
-                MEDISAARTHI
+                MEDIKIOSK
               </span>
               <span className="text-[10px] font-semibold uppercase tracking-wider bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">
                 Patient

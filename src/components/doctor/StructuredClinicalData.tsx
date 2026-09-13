@@ -42,13 +42,13 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
               Underlying Structured Clinical Facts
             </h2>
             <p className="text-xs text-slate-500 font-medium">
-              PostgreSQL source-of-truth records with extraction source & confidence
+              Source-of-truth records with extraction source and confidence
             </p>
           </div>
         </div>
 
         <span className="text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
-          PostgreSQL Verified Store
+          {meta.status === 'FINALIZED' ? 'Clinician-finalized record' : 'Awaiting clinician finalization'}
         </span>
       </div>
 
@@ -62,7 +62,7 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
               <span>Current Intake Complaint</span>
             </div>
             <span className="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded">
-              Active Session
+              {meta.status?.replaceAll('_', ' ') || 'Status unavailable'}
             </span>
           </div>
 
@@ -90,7 +90,7 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
                 Severity Rating
               </span>
               <span className="font-bold text-sm text-amber-900 block font-mono">
-                {cc.severity || 'Not recorded'}
+                {cc.severity ?? 'Not recorded'}
               </span>
             </div>
 
@@ -133,14 +133,14 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
                   <span
                     key={idx}
                     className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium ${
-                      fact.source === 'doctor_verified'
+                      fact.source === 'DOCTOR_ENTERED'
                         ? 'bg-emerald-50 text-emerald-900 border-emerald-300 font-semibold'
                         : 'bg-white text-slate-700 border-slate-200'
                     }`}
                   >
                     <strong>{fact.field_name}:</strong> {fact.value}{' '}
                     <span className="text-[10px] text-slate-400 font-normal">
-                      ({fact.source === 'doctor_verified' ? 'Doctor Verified' : `AI Extracted • ${(fact.confidence * 100).toFixed(0)}%`})
+                      ({fact.source === 'DOCTOR_ENTERED' ? 'Clinician confirmed' : fact.source.replaceAll('_', ' ')})
                     </span>
                   </span>
                 ))}
@@ -179,7 +179,7 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
                       )}
                     </div>
                     <span className="text-[10px] text-slate-400">
-                      Source: {item.source || 'previous_consultation'}
+                      Source: {item.source || 'Source unavailable'}
                     </span>
                   </div>
                 ))}

@@ -31,7 +31,7 @@ export const DoctorAuditTrail: React.FC<DoctorAuditTrailProps> = ({ auditEntries
               </span>
             </h2>
             <p className="text-xs text-slate-500 font-medium">
-              Immutable audit log of all clinical corrections made to AI-assisted intake facts
+              Recorded history of clinician corrections to intake facts
             </p>
           </div>
         </div>
@@ -46,7 +46,7 @@ export const DoctorAuditTrail: React.FC<DoctorAuditTrailProps> = ({ auditEntries
         <div className="p-5 sm:p-6 border-t border-slate-100 space-y-3">
           {auditEntries.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-50 rounded-2xl border border-slate-100">
-              No doctor corrections recorded. The structured facts match the initial intake extraction.
+              No clinician corrections recorded for this encounter.
             </div>
           ) : (
             <div className="space-y-3">

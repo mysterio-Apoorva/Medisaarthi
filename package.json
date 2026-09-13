@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx -y tsx --test src/tests/*.test.ts"
+    "test": "backend\\.venv\\Scripts\\python.exe backend\\scripts\\e2e_smoke.py",
+    "test:unit": "backend\\.venv\\Scripts\\python.exe -m pytest backend/tests -q -p no:cacheprovider",
+    "test:browser": "backend\\.venv\\Scripts\\python.exe -X utf8 backend/scripts/browser_voice_e2e.py",
+    "test:local-ai": "backend\\.venv\\Scripts\\python.exe -X utf8 backend/scripts/local_ai_checks.py",
+    "test:legacy-client-contracts": "npx tsx --test src/tests/patient_workflow.test.ts src/tests/doctor_workflow.test.ts src/tests/voice_workflow.test.ts"
   },
 
   "dependencies": {

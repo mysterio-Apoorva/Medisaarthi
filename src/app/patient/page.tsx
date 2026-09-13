@@ -47,7 +47,7 @@ export default function PatientWelcomePage() {
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
             <div className="text-2xl mb-1.5">⏱️</div>
             <div className="font-bold text-sm text-slate-900">2 मिनट में पूरा</div>
-            <div className="text-xs text-slate-600">Takes only 2 minutes</div>
+            <div className="text-xs text-slate-600">Answer at your own pace</div>
           </div>
           <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm">
             <div className="text-2xl mb-1.5">🩺</div>

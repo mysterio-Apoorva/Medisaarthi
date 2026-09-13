@@ -1,83 +1,76 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Patient, Language } from '@/types';
-import { INITIAL_PATIENTS } from '@/lib/mock-data';
+import { AlertCircle, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react';
 import { PatientHeader } from '@/components/patient/PatientHeader';
-import { PatientIdentification } from '@/components/patient/PatientIdentification';
 import { Button } from '@/components/ui/Button';
-import { ArrowRight, UserCheck } from 'lucide-react';
+import { login, registerPatient } from '@/services/api';
+
+type Mode = 'signin' | 'register';
 
 export default function PatientIdentifyPage() {
   const router = useRouter();
-  const [selectedPatient, setSelectedPatient] = useState<Patient>(INITIAL_PATIENTS[0]);
-  const [language, setLanguage] = useState<Language>('hi');
+  const [mode, setMode] = useState<Mode>('signin');
+  const [email, setEmail] = useState('patient.demo@medikiosk.local');
+  const [password, setPassword] = useState('DemoPass!2026');
+  const [name, setName] = useState('');
+  const [age, setAge] = useState('');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Other');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    try {
-      const storedLang = localStorage.getItem('medisaarthi_selected_lang');
-      if (storedLang === 'en' || storedLang === 'hi') {
-        setLanguage(storedLang);
-      }
-    } catch {}
-  }, []);
-
-  const handleContinue = () => {
-    try {
-      localStorage.setItem('medisaarthi_current_patient_id', selectedPatient.patient_id);
-    } catch {}
+  const continueAsPatient = (patientId: string) => {
+    localStorage.setItem('medisaarthi_current_patient_id', patientId);
     router.push('/patient/language');
   };
 
-  const isHindi = language === 'hi';
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      if (mode === 'signin') {
+        const user = await login(email, password);
+        if (user.role !== 'PATIENT' || !user.patient_id) throw new Error('Please use a patient account for the intake portal.');
+        continueAsPatient(user.patient_id);
+      } else {
+        const parsedAge = Number(age);
+        if (!Number.isInteger(parsedAge) || parsedAge < 0 || parsedAge > 130) throw new Error('Enter a valid age.');
+        const registered = await registerPatient({ name, age: parsedAge, gender, language: 'en', email, password });
+        continueAsPatient(registered.patient_id);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not verify your details. Please retry.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between text-slate-900">
-      <PatientHeader currentStep={1} totalSteps={4} stepName="Identification" />
-
-      <main className="flex-1 max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col justify-center space-y-6 w-full">
-        {/* Title */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-100 text-sky-800 text-xs font-bold mb-1">
-            <UserCheck className="w-3.5 h-3.5 text-sky-600" />
-            <span>{isHindi ? 'मरीज की पहचान' : 'Patient Identification'}</span>
+      <PatientHeader currentStep={1} totalSteps={4} stepName="Secure identification" />
+      <main className="flex-1 max-w-2xl mx-auto px-4 sm:px-6 py-10 w-full flex items-center">
+        <section className="w-full bg-white rounded-3xl border border-slate-200 shadow-lg p-6 sm:p-9 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="inline-flex gap-2 items-center rounded-full bg-sky-100 text-sky-800 px-3 py-1 text-xs font-bold"><UserCheck className="w-4 h-4" /> Secure patient access</div>
+            <h1 className="text-2xl sm:text-3xl font-black">Confirm your details</h1>
+            <p className="text-sm text-slate-600">Your identity is verified before any clinical record can be opened.</p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            {isHindi ? 'अपनी जानकारी चुनें या दर्ज करें' : 'Confirm your details'}
-          </h1>
-          <p className="text-base text-slate-600 max-w-md mx-auto">
-            {isHindi
-              ? 'डेमो मरीज (P1001 — राजेश कुमार) चुनें या अपनी मरीज आईडी दर्ज करें।'
-              : 'Select demo patient (P1001 — Rajesh Kumar) or enter your patient ID.'}
-          </p>
-        </div>
-
-        {/* Identification Form & Demo Switcher */}
-        <PatientIdentification
-          initialPatient={selectedPatient}
-          onPatientSelected={(p) => setSelectedPatient(p)}
-          language={language}
-        />
-
-        {/* Continue CTA */}
-        <div className="pt-2 max-w-md mx-auto w-full">
-          <Button
-            variant="primary"
-            size="xl"
-            onClick={handleContinue}
-            rightIcon={<ArrowRight className="w-5 h-5" />}
-            className="w-full text-lg font-bold shadow-md rounded-2xl py-4 min-h-[56px]"
-            id="continue-button"
-          >
-            {isHindi ? 'आगे बढ़ें (Continue)' : 'Continue'}
-          </Button>
-        </div>
+          <div className="flex rounded-xl bg-slate-100 p-1 text-sm font-bold">
+            {(['signin', 'register'] as Mode[]).map((item) => <button key={item} type="button" onClick={() => { setMode(item); setError(null); }} className={`flex-1 rounded-lg px-3 py-2 transition-colors ${mode === item ? 'bg-white shadow-sm text-sky-700' : 'text-slate-600'}`}>{item === 'signin' ? 'Sign in' : 'Create account'}</button>)}
+          </div>
+          <form onSubmit={submit} className="space-y-4">
+            {mode === 'register' && <><label className="block text-xs font-bold uppercase tracking-wide">Full name<input required value={name} onChange={(event) => setName(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /></label><div className="grid grid-cols-2 gap-3"><label className="block text-xs font-bold uppercase tracking-wide">Age<input required type="number" min="0" max="130" value={age} onChange={(event) => setAge(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /></label><label className="block text-xs font-bold uppercase tracking-wide">Gender<select value={gender} onChange={(event) => setGender(event.target.value as typeof gender)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm"><option>Female</option><option>Male</option><option>Other</option></select></label></div></>}
+            <label className="block text-xs font-bold uppercase tracking-wide">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /></label>
+            <label className="block text-xs font-bold uppercase tracking-wide">Password<input required type="password" minLength={10} value={password} onChange={(event) => setPassword(event.target.value)} className="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2.5 text-sm" /></label>
+            {error && <p role="alert" className="flex gap-2 text-sm text-rose-700"><AlertCircle className="w-4 h-4 shrink-0" />{error}</p>}
+            <Button type="submit" variant="primary" size="xl" isLoading={busy} className="w-full" rightIcon={<ArrowRight className="w-5 h-5" />}>{mode === 'signin' ? 'Securely continue' : 'Create account and continue'}</Button>
+          </form>
+          {mode === 'signin' && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950"><strong>Synthetic demo only:</strong> the prefilled account is seeded in the local database and uses a real server-side session. Change <code>DEMO_PASSWORD</code> before sharing the demo.</p>}
+        </section>
       </main>
-
-      <footer className="border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-        Selected Profile: <strong>{selectedPatient.name}</strong> ({selectedPatient.patient_id})
-      </footer>
+      <footer className="border-t border-slate-200 py-4 text-center text-xs text-slate-500 flex justify-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-600" /> Credentials are never stored in browser local storage.</footer>
     </div>
   );
 }

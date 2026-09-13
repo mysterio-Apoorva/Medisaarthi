@@ -31,7 +31,7 @@ export const PatientProfileHeader: React.FC<PatientProfileHeaderProps> = ({
   onOpenTranscript,
   isVerifying = false,
 }) => {
-  const isVerified = summary.verification_status === 'Verified';
+  const isVerified = ['Verified', 'FINALIZED'].includes(summary.verification_status || '');
   const snapshot = summary.patient_snapshot;
 
   return (
@@ -101,7 +101,7 @@ export const PatientProfileHeader: React.FC<PatientProfileHeaderProps> = ({
             {isVerified && (
               <p className="text-xs text-emerald-800 font-semibold flex items-center gap-1.5 pt-1">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>Verified by Dr. Demo</span>
+                <span>Clinician verified</span>
               </p>
             )}
           </div>
@@ -126,6 +126,7 @@ export const PatientProfileHeader: React.FC<PatientProfileHeaderProps> = ({
             variant="secondary"
             size="md"
             onClick={onOpenEdit}
+            disabled={isVerified || summary.interview_metadata.status !== 'SUBMITTED'}
             leftIcon={<Edit3 className="w-4 h-4 text-slate-700" />}
             className="rounded-xl font-bold bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800"
             id="edit-summary-btn"
@@ -137,6 +138,7 @@ export const PatientProfileHeader: React.FC<PatientProfileHeaderProps> = ({
             variant={isVerified ? 'outline' : 'success'}
             size="md"
             onClick={onOpenVerify}
+            disabled={isVerified || summary.interview_metadata.status !== 'SUBMITTED'}
             isLoading={isVerifying}
             leftIcon={<CheckCircle2 className="w-4 h-4 text-white" />}
             className={`rounded-xl font-bold shadow-sm ${
@@ -146,7 +148,7 @@ export const PatientProfileHeader: React.FC<PatientProfileHeaderProps> = ({
             }`}
             id="verify-summary-btn"
           >
-            {isVerified ? 'Re-Verify Summary' : 'Verify Summary'}
+            {isVerified ? 'Finalized' : 'Verify Summary'}
           </Button>
         </div>
       </div>

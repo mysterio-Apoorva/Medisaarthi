@@ -7,11 +7,14 @@ import { ConsentCard } from '@/components/patient/ConsentCard';
 import { Button } from '@/components/ui/Button';
 import { ArrowRight, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { Language } from '@/types';
+import { recordConsent } from '@/services/api';
 
 export default function PatientConsentPage() {
   const router = useRouter();
-  const [agreed, setAgreed] = useState(true);
+  const [agreed, setAgreed] = useState(false);
   const [language, setLanguage] = useState<Language>('hi');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -22,12 +25,22 @@ export default function PatientConsentPage() {
     } catch {}
   }, []);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!agreed) return;
+    setIsSubmitting(true);
+    setError(null);
     try {
-      localStorage.setItem('medisaarthi_consent_given', 'true');
-    } catch {}
-    router.push('/patient/interview');
+      const patientId = localStorage.getItem('medisaarthi_current_patient_id');
+      if (!patientId) throw new Error('Sign in again to record consent.');
+      const clinical = await recordConsent(patientId, 'CLINICAL_INTAKE');
+      await recordConsent(patientId, 'DOCUMENT_PROCESSING');
+      localStorage.setItem('medisaarthi_current_consent_id', clinical.consent_id);
+      router.push('/patient/interview');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not record consent. Please retry.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGoBack = () => {
@@ -69,7 +82,7 @@ export default function PatientConsentPage() {
           <Button
             variant="primary"
             size="xl"
-            disabled={!agreed}
+            disabled={!agreed || isSubmitting}
             onClick={handleContinue}
             rightIcon={<ArrowRight className="w-5 h-5" />}
             className="w-full text-lg font-bold shadow-md rounded-2xl py-4 min-h-[56px]"
@@ -77,6 +90,8 @@ export default function PatientConsentPage() {
           >
             {isHindi ? 'मैं सहमत हूँ और आगे बढ़ें (I Agree & Continue)' : 'I Agree & Continue'}
           </Button>
+
+          {error && <p className="text-center text-xs text-rose-700 font-semibold" role="alert">{error}</p>}
 
           <Button
             variant="outline"

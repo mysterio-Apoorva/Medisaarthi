@@ -216,18 +216,18 @@ export interface DoctorSummaryResponse {
     condition: string;
     date?: string;
     source?: string;
-    confidence: number;
+    confidence?: number;
   }[];
   medications: {
     name: string;
-    dosage: string;
+    dosage?: string;
     frequency?: string;
-    source: string;
+    source?: string;
   }[];
   allergies: {
     allergen: string;
     reaction?: string;
-    source: string;
+    source?: string;
   }[];
   allergy_status: string;
   important_findings: {
@@ -249,7 +249,7 @@ export interface DoctorSummaryResponse {
     started_at?: string;
     completed_at?: string;
     current_topic?: string;
-    total_messages: number;
+    total_messages?: number;
   };
   verification_status: string;
 }

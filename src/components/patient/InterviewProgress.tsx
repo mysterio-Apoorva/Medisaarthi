@@ -4,19 +4,17 @@ import { Activity } from 'lucide-react';
 interface InterviewProgressProps {
   collectedCount: number;
   estimatedTotal?: number;
+  completionPercentage?: number;
   language?: 'hi' | 'en';
 }
 
 export const InterviewProgress: React.FC<InterviewProgressProps> = ({
   collectedCount,
-  estimatedTotal = 6,
+  completionPercentage = 0,
   language = 'hi',
 }) => {
   const isHindi = language === 'hi';
-  const progressPercent = Math.min(
-    Math.round((collectedCount / estimatedTotal) * 100),
-    100
-  );
+  const progressPercent = Math.max(0, Math.min(Math.round(completionPercentage), 100));
 
   return (
     <div className="w-full bg-slate-50/90 border border-slate-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
@@ -40,7 +38,7 @@ export const InterviewProgress: React.FC<InterviewProgressProps> = ({
         <div className="w-full sm:w-36 h-2 bg-slate-200 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-sky-500 to-teal-500 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${Math.max(progressPercent, 15)}%` }}
+            style={{ width: `${progressPercent}%` }}
           />
         </div>
         <span className="text-xs font-bold text-slate-700 font-mono shrink-0">

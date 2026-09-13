@@ -7,14 +7,11 @@ import {
   HeartPulse,
   LayoutDashboard,
   Users,
-  CalendarClock,
-  Settings,
   ShieldCheck,
   UserCheck,
   LogOut,
   Stethoscope,
 } from 'lucide-react';
-import { CURRENT_DOCTOR } from '@/lib/mock-data';
 
 export const DoctorSidebar: React.FC = () => {
   const pathname = usePathname();
@@ -31,19 +28,6 @@ export const DoctorSidebar: React.FC = () => {
       href: '/doctor#patients-section',
       icon: Users,
       active: pathname.startsWith('/doctor/patients'),
-      badge: '5',
-    },
-    {
-      label: 'Consultations',
-      href: '/doctor',
-      icon: CalendarClock,
-      active: false,
-    },
-    {
-      label: 'Settings',
-      href: '/doctor',
-      icon: Settings,
-      active: false,
     },
   ];
 
@@ -90,15 +74,6 @@ export const DoctorSidebar: React.FC = () => {
                   <Icon className={`w-4 h-4 ${item.active ? 'text-white' : 'text-slate-400'}`} />
                   <span>{item.label}</span>
                 </div>
-                {item.badge && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      item.active ? 'bg-sky-800 text-sky-100' : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
               </Link>
             );
           })}
@@ -122,14 +97,14 @@ export const DoctorSidebar: React.FC = () => {
       <div className="p-4 border-t border-slate-800 bg-slate-950/40">
         <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-800/60 border border-slate-700/60">
           <div className="w-10 h-10 rounded-xl bg-sky-600/30 text-sky-300 border border-sky-500/30 flex items-center justify-center font-bold text-sm shrink-0">
-            {CURRENT_DOCTOR.avatar}
+            DR
           </div>
           <div className="overflow-hidden">
             <div className="font-semibold text-xs text-white truncate">
-              {CURRENT_DOCTOR.name}
+              Authenticated clinician
             </div>
             <div className="text-[11px] text-slate-400 truncate">
-              {CURRENT_DOCTOR.designation}
+              Assigned patient workspace
             </div>
           </div>
         </div>

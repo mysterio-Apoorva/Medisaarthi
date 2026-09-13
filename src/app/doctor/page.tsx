@@ -75,8 +75,7 @@ export default function DoctorDashboardPage() {
           <div className="flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-300">
               <UserCheck className="w-4 h-4 text-sky-400" />
-              <span>Attending: <strong>Dr. Demo</strong></span>
-              <span className="text-slate-500">• (X-Doctor-ID: doctor_demo)</span>
+              <span>Authenticated clinician session</span>
             </div>
 
             <Link
@@ -133,7 +132,7 @@ export default function DoctorDashboardPage() {
               <span>Today's Pre-Consultation Patient Queue</span>
             </h2>
             <span className="text-xs text-slate-500 font-medium">
-              Live records from PostgreSQL • Attending: Dr. Demo
+              Live records from the secured local clinical store
             </span>
           </div>
 

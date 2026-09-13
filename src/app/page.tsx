@@ -1,7 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
 import {
-  HeartPulse,
   UserCheck,
   Stethoscope,
   ShieldCheck,
@@ -16,7 +15,7 @@ import {
   Database,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
-import { INITIAL_PATIENTS } from '@/lib/mock-data';
+import { MediKioskLogo } from '@/components/brand/MediKioskLogo';
 
 export default function HomePage() {
   return (
@@ -25,13 +24,11 @@ export default function HomePage() {
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-xs sticky top-0 z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-sky-600 flex items-center justify-center text-white shadow-md">
-              <HeartPulse className="w-6 h-6" />
-            </div>
+            <MediKioskLogo className="h-10 w-10 shrink-0" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-black text-slate-900 tracking-tight text-xl">
-                  MEDISAARTHI
+                  MEDIKIOSK
                 </span>
                 <Badge variant="primary" size="sm">
                   Hospital MVP
@@ -162,7 +159,7 @@ export default function HomePage() {
               End-to-End MVP Demonstration Story
             </h2>
             <p className="text-xs sm:text-sm text-slate-500">
-              The platform implements the complete flow with persistent local state & drop-in mock APIs.
+              A consented intake is persisted, safety-checked, and handed to a clinician for review.
             </p>
           </div>
 
@@ -175,7 +172,7 @@ export default function HomePage() {
                 Patient Intake & AI Interview
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Select Hindi, consent, choose <strong>P1001 Rajesh Kumar</strong>, report chest pain for 3 days via voice or click, and watch structured data extraction.
+                Sign in or register, grant consent, report chest pain naturally, and watch the persisted clinical state update.
               </p>
             </div>
 
@@ -187,7 +184,7 @@ export default function HomePage() {
                 Doctor Triage & Chart Review
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Doctor opens dashboard, spots <strong>Priority Review (Chest pain with breathlessness)</strong>, inspects 2021 Hypertension and 2023 Diabetes history.
+                Doctor opens the assigned queue, prioritizes chest pain with breathlessness, and reviews facts with source and confidence.
               </p>
             </div>
 
@@ -199,7 +196,7 @@ export default function HomePage() {
                 Physician Edit & Sign-off
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Doctor clicks [Edit], updates symptoms or notes, saves changes, and clicks [Approve] to mark the patient <strong>Verified</strong>.
+                Doctor corrects a fact, resolves any document candidate, and finalizes the encounter with an audit trail.
               </p>
             </div>
           </div>

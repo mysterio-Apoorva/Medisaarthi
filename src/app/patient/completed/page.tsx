@@ -2,52 +2,76 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Patient, Language, DoctorSummaryResponse } from '@/types';
-import { getPatient, getDoctorSummary } from '@/services/api';
-import { INITIAL_PATIENTS } from '@/lib/mock-data';
+import { Patient, Language } from '@/types';
+import { getPatient, getIntakeSnapshot, uploadEncounterDocument } from '@/services/api';
+import { useRouter } from 'next/navigation';
 import { PatientHeader } from '@/components/patient/PatientHeader';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
   CheckCircle2,
   Clock,
-  ArrowRight,
   FileCheck,
   User,
-  ShieldCheck,
+  Upload,
 } from 'lucide-react';
 
 export default function PatientCompletedPage() {
-  const [patient, setPatient] = useState<Patient>(INITIAL_PATIENTS[0]);
-  const [summary, setSummary] = useState<DoctorSummaryResponse | null>(null);
+  const router = useRouter();
+  const [verifiedSubmission, setVerifiedSubmission] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [language, setLanguage] = useState<Language>('hi');
+  const [encounterId, setEncounterId] = useState<string | null>(null);
+  const [documentStatus, setDocumentStatus] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      let currentId = 'P1001';
+      let currentId: string | null = null;
       let currentLang: Language = 'hi';
       try {
         const storedId = localStorage.getItem('medisaarthi_current_patient_id');
         const storedLang = localStorage.getItem('medisaarthi_selected_lang');
+        const storedEncounter = localStorage.getItem('medisaarthi_current_interview_id');
         if (storedId) currentId = storedId;
         if (storedLang === 'en' || storedLang === 'hi') currentLang = storedLang;
+        setEncounterId(storedEncounter);
+        if (!storedEncounter) { router.replace('/patient/identify'); return; }
+        const snapshot = await getIntakeSnapshot(storedEncounter);
+        if (!['SUBMITTED','FINALIZED'].includes(snapshot.status)) { router.replace('/patient/review'); return; }
       } catch {}
 
       setLanguage(currentLang);
-      const p = (await getPatient(currentId)) || INITIAL_PATIENTS[0];
-      setPatient(p);
-
-      try {
-        const s = await getDoctorSummary(currentId);
-        if (s) setSummary(s);
-      } catch {}
+      if (!currentId) return;
+      setPatient(await getPatient(currentId));
+      setVerifiedSubmission(true);
     };
 
-    load();
+    load().catch(e => setLoadError(e instanceof Error ? e.message : 'Could not confirm your submission.'));
   }, []);
 
   const isHindi = language === 'hi';
 
+  const onDocumentSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !encounterId) return;
+    setUploading(true);
+    setDocumentStatus(null);
+    try {
+      const result = await uploadEncounterDocument(encounterId, file);
+      setDocumentStatus(result.processing_status === 'PROCESSED'
+        ? `${file.name} processed. ${result.extracted_count} item(s) were sent for clinician reconciliation.`
+        : `${file.name} was saved, but needs clinician review (${result.error_code || 'text extraction unavailable'}).`);
+    } catch (error) {
+      setDocumentStatus(error instanceof Error ? error.message : 'Document upload failed.');
+    } finally {
+      setUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  if (!verifiedSubmission) return <main className="min-h-screen bg-slate-50 p-8"><p role={loadError ? 'alert' : 'status'}>{loadError || 'Checking your submitted record…'}</p><Link className="text-sky-700 underline" href="/patient/review">Return to review</Link></main>;
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between text-slate-900">
       <PatientHeader showDoctorPortalLink={false} />
@@ -83,7 +107,7 @@ export default function PatientCompletedPage() {
             <div className="flex items-center gap-2.5">
               <User className="w-5 h-5 text-sky-600" />
               <span className="font-bold text-sm text-slate-900 uppercase tracking-wider">
-                {patient.name} ({patient.patient_id})
+                {patient ? `${patient.name} (${patient.patient_id})` : (isHindi ? 'रोगी रिकॉर्ड लोड हो रहा है' : 'Loading patient record')}
               </span>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
@@ -130,8 +154,25 @@ export default function PatientCompletedPage() {
           </div>
         </div>
 
+        <div className="bg-sky-50 rounded-2xl border border-sky-100 p-5 text-left space-y-3">
+          <div className="flex items-start gap-3">
+            <Upload className="w-5 h-5 text-sky-700 mt-0.5 shrink-0" />
+            <div>
+              <h2 className="font-bold text-slate-900">Add a medical report (optional)</h2>
+              <p className="text-sm text-slate-600 mt-1">PDF, JPEG, PNG, or WebP up to 10 MB. Extracted information remains pending doctor approval.</p>
+            </div>
+          </div>
+          <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-white border border-sky-200 px-4 py-2.5 text-sm font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-50">
+            {uploading ? 'Processing document…' : 'Choose report'}
+            <input className="sr-only" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" disabled={uploading || !encounterId} onChange={onDocumentSelected} />
+          </label>
+          {!encounterId && <p className="text-xs text-amber-700">No current encounter was found. Return to the patient dashboard to start a new intake.</p>}
+          {documentStatus && <p role="status" className="text-sm text-slate-700">{documentStatus}</p>}
+        </div>
+
         {/* Action Button */}
         <div className="pt-2 max-w-md mx-auto w-full">
+          <Link href="/patient/follow-up" className="mb-3 block text-center text-sm font-bold text-sky-700 underline">Open your follow-up check-in</Link>
           <Link href="/patient" className="w-full">
             <Button
               variant="primary"

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
@@ -8,7 +8,7 @@ import { CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
 interface VerifyConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (followUp: { treatmentPlan?: string; followUpAt?: string }) => Promise<void>;
   isVerifying: boolean;
   patientName?: string;
   patientId?: string;
@@ -22,6 +22,8 @@ export const VerifyConfirmModal: React.FC<VerifyConfirmModalProps> = ({
   patientName,
   patientId,
 }) => {
+  const [treatmentPlan, setTreatmentPlan] = useState('');
+  const [followUpAt, setFollowUpAt] = useState('');
   return (
     <Modal
       isOpen={isOpen}
@@ -47,8 +49,15 @@ export const VerifyConfirmModal: React.FC<VerifyConfirmModalProps> = ({
 
         <p className="text-xs text-slate-600 leading-relaxed">
           Clicking <strong>Verify Summary</strong> will mark this intake record as officially verified by{' '}
-          <strong>Dr. Demo</strong> and store the verification timestamp in the permanent clinical audit log.
+          the authenticated clinician and store the verification timestamp in the permanent clinical audit log.
         </p>
+
+        <fieldset className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/40 p-4">
+          <legend className="px-1 text-sm font-bold text-slate-900">Follow-up plan</legend>
+          <p className="text-xs text-slate-600">These are clinician-entered instructions only. The follow-up assistant will never add or change treatment.</p>
+          <label className="block text-xs font-semibold text-slate-700">Treatment or self-care instructions (optional)<textarea value={treatmentPlan} onChange={event => setTreatmentPlan(event.target.value)} maxLength={2000} rows={3} disabled={isVerifying} className="mt-1 w-full rounded-xl border border-slate-300 bg-white p-2 text-sm font-normal" placeholder="Record the verified plan or instructions for the patient." /></label>
+          <label className="block text-xs font-semibold text-slate-700">Suggested follow-up date (optional)<input value={followUpAt} onChange={event => setFollowUpAt(event.target.value)} type="date" disabled={isVerifying} className="mt-1 block rounded-xl border border-slate-300 bg-white p-2 text-sm font-normal" /></label>
+        </fieldset>
 
         <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
           <Button
@@ -67,7 +76,7 @@ export const VerifyConfirmModal: React.FC<VerifyConfirmModalProps> = ({
             type="button"
             variant="success"
             size="md"
-            onClick={onConfirm}
+            onClick={() => onConfirm({ treatmentPlan: treatmentPlan.trim() || undefined, followUpAt: followUpAt || undefined })}
             isLoading={isVerifying}
             leftIcon={<CheckCircle2 className="w-4 h-4 text-white" />}
             className="rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md"

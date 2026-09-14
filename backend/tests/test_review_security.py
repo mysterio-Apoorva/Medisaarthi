@@ -21,6 +21,10 @@ def test_review_consent_status_locks_and_fhir():
         for field,value in [('chief_complaint','fatigue'),('duration','3 days'),('severity',5),('breathlessness',False),('onset','gradual'),('fever',False)]:
             revision = client.get(f'/interviews/{identifier}').json()['revision']
             _expect(client.post(f'/interviews/{identifier}/corrections',json={'field_name':field,'value':value,'expected_revision':revision}),200)
+        # Corrections do not spend clinical questions or bypass the five-turn minimum.
+        for _ in range(5):
+            current = client.get(f'/interviews/{identifier}').json()
+            _expect(client.post(f'/interviews/{identifier}/answers', json={'message': 'None', 'expected_revision': current['revision']}), 200)
         revision = client.get(f'/interviews/{identifier}').json()['revision']
         _expect(client.post(f'/interviews/{identifier}/submit',json={'expected_revision':revision}),409)
         _expect(client.post(f'/interviews/{identifier}/submit',json={'expected_revision':revision,'reviewed':True}),200)

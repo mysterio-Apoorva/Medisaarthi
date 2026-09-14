@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from pydantic import BaseModel, Field, create_model
 from backend.app.ai.providers import safe_extract, configured_provider, StructuredExtraction, OllamaProvider
-from backend.app.clinical_engine import next_question, red_flags, completeness
+from backend.app.clinical_engine import next_question, red_flags, completeness, extract_rule_based
 
 
 class IntakeAgent:
@@ -99,6 +99,10 @@ class ClinicalOrchestrator:
 
     def interpret(self, statement, question_id, state) -> IntakeResult:
         started = time.monotonic()
+        immediate = extract_rule_based(statement, question_id, state)
+        if red_flags({**state, **{f['field_name']: f['value'] for f in immediate}}):
+            # Deterministic danger signals are returned immediately, without model latency.
+            return IntakeResult(StructuredExtraction.model_validate({'facts': immediate}), 'clinical_rules', None, int((time.monotonic()-started)*1000))
         extraction, provider, warning = self.intake.run(statement, question_id, state)
         return IntakeResult(extraction, provider, warning, int((time.monotonic()-started)*1000))
 

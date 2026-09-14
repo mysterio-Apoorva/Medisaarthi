@@ -175,7 +175,7 @@ def queue(user: AuthenticatedUser = Depends(require_roles("DOCTOR", "ADMIN"))):
             encounter = _latest_encounter(db, patient_data["patient_id"])
             if encounter:
                 state, _ = _state(db, encounter["encounter_id"])
-                flags = red_flags(state)
+                flags = red_flags(state) + [dict(row) for row in db.execute('SELECT severity FROM red_flags WHERE encounter_id=? AND resolved_at IS NULL', (encounter['encounter_id'],))]
                 result.append({"patient_id": patient_data["patient_id"], "name": patient_data["name"], "age": patient_data["age"], "gender": patient_data["gender"], "language": patient_data["language"], "interview_id": encounter["encounter_id"], "current_complaint": state.get("chief_complaint"), "duration": state.get("duration"), "severity": state.get("severity"), "status": encounter["status"], "priority": max((flag["severity"] for flag in flags), key=lambda level:{'NORMAL':0,'INFO':1,'MODERATE':2,'HIGH':3,'EMERGENCY':4}[level], default="NORMAL"), "updated_at": encounter["started_at"]})
             else:
                 result.append({"patient_id": patient_data["patient_id"], "name": patient_data["name"], "age": patient_data["age"], "gender": patient_data["gender"], "language": patient_data["language"], "current_complaint": None, "status": "NO_ENCOUNTER", "priority": "NORMAL"})

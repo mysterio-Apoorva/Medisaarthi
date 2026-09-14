@@ -35,8 +35,8 @@ describe('Patient client contract', () => {
 
   test('shows recoverable errors and keeps a typed response path', () => {
     const interview = read('src/app/patient/interview/page.tsx');
-    assert.match(interview, /errorMessage/);
-    assert.match(interview, /Retry/);
+    assert.match(interview, /setError/);
+    assert.match(interview, /resume\(\)/);
     assert.match(interview, /id="patient-answer-input"/);
     assert.doesNotMatch(interview, /console\.error\(err\.stack\)/);
   });

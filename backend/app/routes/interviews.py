@@ -17,6 +17,7 @@ from backend.app.store import now, store
 from backend.app.voice import SpeechToTextUnavailable, transcribe_upload
 from backend.app.clinical_validation import validate_fact
 from backend.app.ai.orchestrator import orchestrator
+from backend.app.question_budget import budget, plan_question, record_candidates, MIN_QUESTIONS
 
 router = APIRouter(prefix="/interviews", tags=["Clinical Intake"])
 
@@ -66,8 +67,8 @@ def correct_patient_fact(encounter_id: str, payload: PatientCorrection, user: Au
             raise HTTPException(409, "The record changed. Reload before correcting it.")
         _write_fact(db, encounter_id, row["patient_id"], {"field_name": payload.field_name, "value": value, "confidence": 1.0, "evidence": "Explicit patient correction during review"}, "PATIENT_REPORTED")
         corrected_state = _state(db, encounter_id)
-        _set_flags(db, encounter_id, red_flags(corrected_state))
-        next_q = next_question(corrected_state,row['language'],row['care_mode'])
+        _set_flags(db, encounter_id, red_flags(corrected_state), preserve=True)
+        next_q = _planned_question(db, dict(row), corrected_state, refresh=True)
         db.execute("UPDATE encounters SET revision=revision+1,status=?,stage=? WHERE encounter_id=?", ('ACTIVE' if next_q else 'PATIENT_REVIEW',stage_for(corrected_state,row['care_mode']) if next_q else 'PATIENT_REVIEW',encounter_id))
         store.audit(db, user.user_id, "PATIENT_CORRECTED_FACT", "ENCOUNTER", encounter_id, {"field": payload.field_name})
         return {"revision": row["revision"] + 1}
@@ -84,6 +85,25 @@ def _state(db, encounter_id: str) -> dict[str, Any]:
     for row in rows:
         result[row["field_name"]] = json.loads(row["value_json"])
     return result
+
+
+def _answers(db, encounter_id):
+    return [dict(row) for row in db.execute('SELECT * FROM answers WHERE encounter_id=? ORDER BY created_at', (encounter_id,)).fetchall()]
+
+
+def _planned_question(db, encounter, state, refresh=False):
+    state = {**state, '_unresolved_safety': bool(db.execute('SELECT 1 FROM red_flags WHERE encounter_id=? AND resolved_at IS NULL LIMIT 1', (encounter['encounter_id'],)).fetchone())}
+    answers = _answers(db, encounter['encounter_id'])
+    if budget(state, answers, encounter.get('care_mode', 'MODERN'))['complete']:
+        return None
+    if encounter.get('pending_question_json') and not refresh:
+        return json.loads(encounter['pending_question_json'])
+    question = plan_question(state, encounter['language'], encounter.get('care_mode', 'MODERN'), answers,
+                             record_candidates(db, encounter['patient_id'], encounter['encounter_id']))
+    encoded = json.dumps(question, ensure_ascii=False) if question else None
+    db.execute('UPDATE encounters SET pending_question_json=? WHERE encounter_id=?', (encoded, encounter['encounter_id']))
+    encounter['pending_question_json'] = encoded
+    return question
 
 
 _TIMELINE_FACT_LABELS = {
@@ -143,9 +163,12 @@ def _write_fact(db, encounter_id: str, patient_id: str, fact: dict[str, Any], so
     return True
 
 
-def _set_flags(db, encounter_id: str, flags: list[dict[str, Any]]) -> None:
-    db.execute("DELETE FROM red_flags WHERE encounter_id=? AND resolved_at IS NULL", (encounter_id,))
+def _set_flags(db, encounter_id: str, flags: list[dict[str, Any]], preserve=False) -> None:
+    if not preserve:
+        db.execute("DELETE FROM red_flags WHERE encounter_id=? AND resolved_at IS NULL", (encounter_id,))
     for flag in flags:
+        if db.execute('SELECT 1 FROM red_flags WHERE encounter_id=? AND rule_code=? AND resolved_at IS NULL', (encounter_id, flag['code'])).fetchone():
+            continue
         db.execute(
             "INSERT INTO red_flags(flag_id,encounter_id,rule_code,severity,message,evidence_json,created_at) VALUES(?,?,?,?,?,?,?)",
             (f"FLG_{uuid4().hex}", encounter_id, flag["code"], flag["severity"], flag["message"], json.dumps(flag["evidence"]), now()),
@@ -155,7 +178,16 @@ def _set_flags(db, encounter_id: str, flags: list[dict[str, Any]]) -> None:
 def _response(db, encounter: dict[str, Any], extracted: list[dict[str, Any]] | None = None, ai_error: str | None = None) -> dict[str, Any]:
     state = _state(db, encounter["encounter_id"])
     evaluation = orchestrator.evaluate(state, encounter["language"], encounter.get("care_mode", "MODERN"))
-    quality, flags, question = evaluation['completion'], evaluation['flags'], evaluation['question']
+    quality, flags = evaluation['completion'], evaluation['flags']
+    persisted_flags = [dict(row) for row in db.execute('SELECT rule_code AS code,severity,message,evidence_json FROM red_flags WHERE encounter_id=? AND resolved_at IS NULL', (encounter['encounter_id'],)).fetchall()]
+    flags = list({f['code']: f for f in [*flags, *persisted_flags]}.values())
+    question = _planned_question(db, encounter, state) if encounter['status'] == 'ACTIVE' else None
+    question_budget = budget({**state, '_unresolved_safety': bool(flags)}, _answers(db, encounter['encounter_id']), encounter.get('care_mode', 'MODERN'))
+    # Resuming a pre-upgrade encounter must not strand a patient at the new cap.
+    if encounter['status'] == 'ACTIVE' and question_budget['complete']:
+        db.execute("UPDATE encounters SET status='PATIENT_REVIEW',stage='PATIENT_REVIEW',pending_question_json=NULL WHERE encounter_id=? AND status='ACTIVE'", (encounter['encounter_id'],))
+        encounter.update(status='PATIENT_REVIEW', stage='PATIENT_REVIEW', pending_question_json=None)
+        question = None
     quality['contradictions'] = [row['field_name'] for row in db.execute("SELECT DISTINCT field_name FROM reconciliation_items WHERE encounter_id=? AND status='OPEN'", (encounter['encounter_id'],)).fetchall()]
     return {
         "interview_id": encounter["encounter_id"], "encounter_id": encounter["encounter_id"], "patient_id": encounter["patient_id"],
@@ -165,6 +197,8 @@ def _response(db, encounter: dict[str, Any], extracted: list[dict[str, Any]] | N
         "stage": stage_for(state, encounter.get("care_mode", "MODERN")), "completion": quality, "priority_flags": flags,
         "interview_completed": encounter["status"] in {"PATIENT_REVIEW", "SUBMITTED", "FINALIZED"},
         "ai_warning": ai_error,
+        "question_budget": question_budget,
+        "answers": _answers(db, encounter['encounter_id']),
     }
 
 
@@ -229,14 +263,14 @@ def answer(encounter_id: str, payload: AnswerInput, user: AuthenticatedUser = De
         if payload.expected_revision is not None and payload.expected_revision != encounter["revision"]:
             raise HTTPException(status_code=409, detail="This response is stale. Refresh the interview before continuing.")
         state = _state(db, encounter_id)
-        question = next_question(state, encounter["language"], encounter["care_mode"])
+        question = _planned_question(db, encounter, state)
         if question is None:
             raise HTTPException(status_code=409, detail="The interview is ready for patient review")
         clean_answer = payload.message.strip()
         if not clean_answer:
             raise HTTPException(status_code=422, detail="Please provide an answer before continuing")
     # Model inference must not hold the SQLite write lock. Recheck after inference.
-    interpretation = orchestrator.interpret(clean_answer, question["id"], state)
+    interpretation = orchestrator.interpret(clean_answer, question["id"], {**state, '_question_fields': question.get('fields', [question['id']])})
     extraction, provider, ai_error = interpretation.extraction, interpretation.provider, interpretation.warning
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -248,16 +282,34 @@ def answer(encounter_id: str, payload: AnswerInput, user: AuthenticatedUser = De
             (f"ANS_{uuid4().hex}", encounter_id, question["id"], question["text"], clean_answer, "PATIENT_REPORTED", now()),
         )
         extracted = []
+        confirmation = question.get('confirmation')
+        confirmation_answer = ' '.join(clean_answer.casefold().translate(str.maketrans('', '', '.,!?।')).split())
+        if confirmation and confirmation_answer in {'no', 'no that is wrong', 'no that is not correct', 'नहीं'}:
+            # Rejecting an old report does not establish absence of current medication/allergy.
+            extraction.facts = [f for f in extraction.facts if f.field_name != question['id']]
+        if confirmation and confirmation_answer in {'yes', 'yes still correct', 'yes that is correct', 'yes it is', 'yes i still take it', 'yes i am still taking it', 'correct', 'हाँ', 'हां', 'जी हाँ', 'हाँ सही है'}:
+            value = validate_fact(question['id'], confirmation['value'])
+            # Patient confirmation preserves the original document and its clinician reconciliation.
+            fact = {'field_name': question['id'], 'value': value, 'confidence': 1.,
+                    'evidence': f"Patient confirmed {confirmation['source']} {confirmation.get('document_id', confirmation.get('fact_id', ''))}: {clean_answer}"}
+            _write_fact(db, encounter_id, encounter['patient_id'], fact, 'PATIENT_REPORTED')
+            extraction.facts = [f for f in extraction.facts if f.field_name != question['id']]
         for fact in extraction.facts:
             safe_fact = fact.model_dump()
+            try:
+                safe_fact['value'] = validate_fact(safe_fact['field_name'], safe_fact['value'])
+            except HTTPException:
+                continue
             accepted = _write_fact(db, encounter_id, encounter["patient_id"], safe_fact)
             if accepted:
                 extracted.append({"field_name": safe_fact["field_name"], "value": safe_fact["value"], "source": "AI_EXTRACTION", "confidence": safe_fact["confidence"]})
         updated_state = _state(db, encounter_id)
-        flags = red_flags(updated_state)
-        _set_flags(db, encounter_id, flags)
+        # A newly reported danger must surface even if a contradictory old fact awaits review.
+        observed = {f.field_name: f.value for f in extraction.facts}
+        flags = red_flags(updated_state) + red_flags({**updated_state, **observed})
+        _set_flags(db, encounter_id, flags, preserve=True)
         quality = completeness(updated_state, encounter["care_mode"])
-        next_q = next_question(updated_state, encounter["language"], encounter["care_mode"])
+        next_q = _planned_question(db, encounter, updated_state, refresh=True)
         next_status = "PATIENT_REVIEW" if next_q is None else "ACTIVE"
         next_stage = "PATIENT_REVIEW" if next_q is None else stage_for(updated_state, encounter["care_mode"])
         next_revision = encounter["revision"] + 1
@@ -345,7 +397,10 @@ def submit(encounter_id: str, payload: SubmitInput, user: AuthenticatedUser = De
             raise HTTPException(409, "Review your record and confirm consent before submission")
         state = _state(db, encounter_id)
         quality = completeness(state, encounter["care_mode"])
-        if quality["critical_missing"]:
+        answered = len(_answers(db, encounter_id))
+        if answered < MIN_QUESTIONS:
+            raise HTTPException(409, 'Complete at least five interview questions before submission')
+        if quality["critical_missing"] and not budget(state, _answers(db, encounter_id), encounter['care_mode'])['complete']:
             raise HTTPException(status_code=409, detail={"message": "Critical intake information is still missing", "fields": quality["critical_missing"]})
         if payload.expected_revision is not None and payload.expected_revision != encounter["revision"]:
             raise HTTPException(status_code=409, detail="This submission is stale. Refresh the interview before continuing.")

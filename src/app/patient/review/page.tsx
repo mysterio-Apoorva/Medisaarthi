@@ -48,10 +48,11 @@ export default function PatientReviewPage() {
           </div>)}
         </section>
         <DocumentReview encounterId={snapshot.encounter_id} allowUpload />
-        {snapshot.completion.critical_missing.length > 0 && <div className="rounded-xl bg-amber-50 p-4">Still needed: {snapshot.completion.critical_missing.join(', ')}. <button className="underline" onClick={() => router.push('/patient/interview')}>Continue interview</button></div>}
+        {!snapshot.question_budget.complete && <button className="min-h-12 rounded-xl bg-teal-100 px-5 py-3 text-teal-950" onClick={() => router.push('/patient/interview')}>Return to the conversation</button>}
+        {snapshot.completion.critical_missing.length > 0 && <div className="rounded-xl bg-amber-50 p-4">Not yet recorded: {snapshot.completion.critical_missing.join(', ')}. {snapshot.question_budget.complete ? 'Your clinician will review the missing information. You do not need another interview question.' : <button className="underline" onClick={() => router.push('/patient/interview')}>Continue interview</button>}</div>}
         <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 bg-white"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" /><span>I have reviewed this information and consent to sharing this record with my authorized clinician. Submission consent version 2026-09.</span></label>
         {dirty && <p role="status" className="text-amber-800">Save each changed field before submitting. Your other unsaved corrections stay in this form.</p>}
-        <button id="submit-reviewed-intake" className="w-full rounded-2xl bg-sky-600 text-white p-4 font-bold disabled:opacity-50" disabled={!confirmed || dirty || busy || snapshot.completion.critical_missing.length > 0} onClick={async () => {
+        <button id="submit-reviewed-intake" className="w-full rounded-2xl bg-sky-600 text-white p-4 font-bold disabled:opacity-50" disabled={!confirmed || dirty || busy || snapshot.question_budget.answered < 5 || (snapshot.completion.critical_missing.length > 0 && !snapshot.question_budget.complete)} onClick={async () => {
           setBusy(true); setError('');
           try { await completeInterviewSession(snapshot.encounter_id, snapshot.revision, confirmed); router.push('/patient/completed'); }
           catch (e) { setError(e instanceof Error ? e.message : 'Submission failed'); } finally { setBusy(false); }

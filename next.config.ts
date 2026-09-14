@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['127.0.0.1'],
   // Local CPU summary/STT calls have bounded server timeouts up to 120 seconds.
   experimental: { proxyTimeout: 130000 },
   async rewrites() {

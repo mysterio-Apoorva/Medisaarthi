@@ -56,7 +56,7 @@ def main() -> None:
         }
         turn = started
         answers.update({'past_surgical_history':'none','family_history':'Father has hypertension','social_history':'I do not smoke. I am a teacher.','personal_history':'Sleep has been disturbed','review_of_systems':'none'})
-        for _ in range(30):
+        for _ in range(10):
             question = turn.get("next_question")
             if not question:
                 break
@@ -64,6 +64,7 @@ def main() -> None:
             assert field in answers, f"No answer for required field {field}"
             turn = expect(client.post(f"/interviews/{encounter_id}/answers", json={"message": answers[field], "expected_revision": revision}), 200)
             revision = turn["revision"]
+        assert 5 <= turn['question_budget']['answered'] <= 10 and turn['next_question'] is None
         assert turn["completion"]["critical_missing"] == [], turn
         assert any(flag["code"] == "CHEST_PAIN_BREATHLESSNESS" for flag in turn["priority_flags"]), turn
 

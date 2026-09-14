@@ -109,7 +109,11 @@ export type IntakeSnapshot = {
   priority_flags: { code: string; severity: string; message: string }[];
   next_question: { id: string; text: string } | null; ai_warning?: string | null;
   answers: { answer_id: string; question_text: string; answer_text: string; created_at: string }[];
+  question_budget: { minimum: number; maximum: number; answered: number; complete: boolean; reason: string | null; unresolved_fields: string[]; needs_clinician_review: boolean };
 };
+export async function sendIntakeAnswer(id: string, message: string, revision: number, signal?: AbortSignal): Promise<IntakeSnapshot> {
+  return request(`/interviews/${encodeURIComponent(id)}/answers`, { method: 'POST', body: JSON.stringify({ message, expected_revision: revision }), signal });
+}
 export async function getIntakeSnapshot(id: string): Promise<IntakeSnapshot> {
   return request(`/interviews/${encodeURIComponent(id)}`);
 }

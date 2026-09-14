@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import re
 from threading import Lock
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
@@ -64,7 +65,7 @@ class AIProvider(ABC):
         model_facts = [
             fact
             for fact in result.facts
-            if _is_safe_model_fact(fact, statement_folded, question_id)
+            if _is_safe_model_fact(fact, statement_folded, question_id, state.get('_question_fields'))
         ]
 
         # A model response is never allowed to replace a validated clinical
@@ -82,7 +83,7 @@ class AIProvider(ABC):
         return StructuredExtraction.model_validate({"facts": list(merged.values())})
 
 
-def _is_safe_model_fact(fact: ExtractedFact, statement_folded: str, question_id: str) -> bool:
+def _is_safe_model_fact(fact: ExtractedFact, statement_folded: str, question_id: str, fields: list[str] | None = None) -> bool:
     """Accept only grounded, type-safe output for the active question.
 
     Structured JSON only proves that an LLM response can be parsed; it does
@@ -91,7 +92,11 @@ def _is_safe_model_fact(fact: ExtractedFact, statement_folded: str, question_id:
     ``chest_pain`` as a field for a chief-complaint answer) or assigning an
     arbitrary string to a boolean/severity field.
     """
-    if fact.field_name != question_id:
+    if fact.field_name not in (fields or [question_id]):
+        return False
+    question_id = fact.field_name
+    if fields and len(fields) > 1 and statement_folded.strip(' .!') in {'yes', 'yeah', 'हाँ', 'हां'}:
+        # A yes to a compound question does not establish which symptom/condition is present.
         return False
     if any(word in statement_folded for word in UNKNOWN_WORDS + DECLINED_WORDS):
         return False
@@ -101,10 +106,13 @@ def _is_safe_model_fact(fact: ExtractedFact, statement_folded: str, question_id:
     if question_id in BOOL_FIELDS:
         return isinstance(fact.value, bool)
     if question_id in LIST_FIELDS:
-        return isinstance(fact.value, list) and all(isinstance(item, str) and item.strip() for item in fact.value)
+        if not isinstance(fact.value, list): return False
+        if not fact.value:
+            return bool(re.search(r'\b(?:no|none|nothing|nahi|nahin)\b|नहीं', evidence))
+        return all(isinstance(item, str) and item.strip() and item.casefold().strip() in statement_folded for item in fact.value)
     if question_id == "severity":
         return type(fact.value) is int and _severity(statement_folded, True) == fact.value
-    return isinstance(fact.value, str) and bool(fact.value.strip())
+    return isinstance(fact.value, str) and bool(fact.value.strip()) and fact.value.casefold().strip() in statement_folded
 
 
 class OllamaProvider(AIProvider):

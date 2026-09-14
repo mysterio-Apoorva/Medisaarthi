@@ -1,892 +1,282 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  Patient,
-  Language,
-  InterviewMessage,
-  ExtractedFactItem,
-  ExtractedSymptomData,
-} from '@/types';
-import {
-  startInterviewSession,
-  respondToInterviewSession,
-  transcribeInterviewAudio,
-  getIntakeSnapshot,
-  getPatient,
-  type CareMode,
-} from '@/services/api';
-import { PatientHeader } from '@/components/patient/PatientHeader';
-import { InterviewProgress } from '@/components/patient/InterviewProgress';
-import { ExtractedInfo } from '@/components/patient/ExtractedInfo';
+import { AlertCircle, ArrowRight, Check, HelpCircle, Keyboard, Mic, Pause, Play, X } from 'lucide-react';
+import { getIntakeSnapshot, sendIntakeAnswer, startInterviewSession, transcribeInterviewAudio, ApiError, type IntakeSnapshot } from '@/services/api';
 import { TalkingAvatar } from '@/components/patient/TalkingAvatar';
 import { useAssistantSpeech } from '@/components/patient/useAssistantSpeech';
-import { Button } from '@/components/ui/Button';
-import {
-  Send,
-  Bot,
-  ArrowRight,
-  ArrowLeft,
-  AlertCircle,
-  RefreshCw,
-  Sparkles,
-  CheckCircle2,
-  HelpCircle,
-  Mic,
-  MicOff,
-  Square,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import { VoiceCapture, voiceConfig } from '@/lib/voice-activity';
+
+type ConversationState = 'IDLE' | 'ASKING' | 'SPEAKING' | 'LISTENING' | 'RECORDING' | 'TRANSCRIBING' | 'PROCESSING' | 'VALIDATING' | 'NEXT_QUESTION' | 'COMPLETED' | 'PAUSED' | 'SAFETY_PAUSE' | 'TRANSCRIPTION_ERROR' | 'AI_ERROR' | 'TTS_ERROR' | 'MICROPHONE_ERROR';
+const LABELS: Record<ConversationState, [string, string]> = {
+  IDLE: ['Getting ready', 'तैयार हो रहे हैं'], ASKING: ['One moment', 'एक क्षण'],
+  SPEAKING: ['Your assistant is speaking', 'आपका सहायक बोल रहा है'],
+  LISTENING: ['Listening · take your time', 'सुन रहे हैं · आराम से बोलिए'],
+  RECORDING: ['Listening to you', 'आपकी बात सुन रहे हैं'],
+  TRANSCRIBING: ['Understanding your words', 'आपकी बात समझ रहे हैं'],
+  PROCESSING: ['Understanding your answer', 'आपका उत्तर समझ रहे हैं'],
+  VALIDATING: ['Checking what you shared', 'आपकी बात देख रहे हैं'],
+  NEXT_QUESTION: ['One moment', 'एक क्षण'], COMPLETED: ['Thank you', 'धन्यवाद'],
+  PAUSED: ['Take your time', 'आराम से समय लीजिए'], SAFETY_PAUSE: ['Please ask a member of staff for help', 'कृपया अस्पताल के कर्मचारी से मदद माँगें'],
+  TRANSCRIPTION_ERROR: ['Let’s try that again', 'फिर से कोशिश करते हैं'],
+  AI_ERROR: ['Your answer needs another moment', 'आपके उत्तर के लिए थोड़ा और समय चाहिए'],
+  TTS_ERROR: ['Let’s enable your assistant’s voice', 'सहायक की आवाज़ शुरू करें'],
+  MICROPHONE_ERROR: ['We need access to your microphone', 'माइक्रोफ़ोन की अनुमति चाहिए'],
+};
+function delay(ms: number, signal: AbortSignal) {
+  return new Promise<void>(resolve => {
+    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, ms); signal.addEventListener('abort', done, { once: true });
+    if (signal.aborted) done();
+  });
+}
 
 export default function PatientInterviewPage() {
   const router = useRouter();
-
-  // Core State
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [language, setLanguage] = useState<Language>('hi');
-  const [careMode, setCareMode] = useState<CareMode>('MODERN');
-  const [interviewId, setInterviewId] = useState<string>('');
-  const [currentQuestion, setCurrentQuestion] = useState<string>('');
-  const [messages, setMessages] = useState<InterviewMessage[]>([]);
-  const [inputText, setInputText] = useState<string>('');
-  const [isInitializing, setIsInitializing] = useState<boolean>(true);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [interviewCompleted, setInterviewCompleted] = useState<boolean>(false);
-  const [questionCount, setQuestionCount] = useState<number>(1);
-  const [revision, setRevision] = useState<number>(0);
-
-  // Voice Interaction State (Step 4C) - Speaking and listening by default
-  const [voiceMode, setVoiceMode] = useState<boolean>(true);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isProcessingVoice, setIsProcessingVoice] = useState<boolean>(false);
+  const [snapshot, setSnapshot] = useState<IntakeSnapshot | null>(null);
+  const [phase, setPhase] = useState<ConversationState>('IDLE');
+  const [paused, setPaused] = useState(false);
+  const [typing, setTyping] = useState(!voiceConfig.enabled);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [lastTranscript, setLastTranscript] = useState('');
+  const [spokenText, setSpokenText] = useState('');
+  const [error, setError] = useState('');
+  const [help, setHelp] = useState(false);
+  const [level, setLevel] = useState(0);
+  const [acknowledged, setAcknowledged] = useState('');
+  const [retry, setRetry] = useState(0);
   const speech = useAssistantSpeech();
-  const isSpeaking = speech.speaking;
-  const [completionPercentage, setCompletionPercentage] = useState(0);
-  const [safetyFlags, setSafetyFlags] = useState<{ code: string; message: string }[]>([]);
-  const [aiWarning, setAiWarning] = useState<string | null>(null);
-  const [isRequestingMic, setIsRequestingMic] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState<number>(0);
-  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const { speak, stop, unlock } = speech;
+  const active = useRef<AbortController | null>(null);
+  const submitting = useRef(false);
+  const hi = snapshot?.language === 'hi';
+  const language = snapshot?.language || 'en';
+  const safetyKey = snapshot?.priority_flags.map(f => f.code).sort().join('|') || '';
+  const completed = !!snapshot && snapshot.status !== 'ACTIVE';
+  const interrupt = useCallback(() => { active.current?.abort(); stop(); }, [stop]);
 
-  // Extracted structured facts from backend
-  const [extractedData, setExtractedData] = useState<ExtractedSymptomData>({
-    chief_complaint: '',
-    duration: '',
-    severity: '',
-    associated_symptoms: [],
-  });
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isRecordingRef = useRef<boolean>(false);
-  const streamRef = useRef<MediaStream | null>(null);
-  const mountedRef = useRef(true);
-  const requestingMicRef = useRef(false);
-  const initializingRef = useRef(false);
-  const uploadRef = useRef<AbortController | null>(null);
-  const submitRef = useRef(false);
-
-  const isHindi = language === 'hi';
-
-  const speakQuestion = (text: string, locale = language) => {
-    if (!isRecordingRef.current && !requestingMicRef.current) void speech.speak(text, locale);
-  };
-  const stopSpeaking = speech.stop;
-
-  // 2. Initialize Interview with Backend
-  const initializeInterview = async () => {
-    if (initializingRef.current || isRecordingRef.current || requestingMicRef.current) return;
-    initializingRef.current = true;
-    setIsInitializing(true);
-    setErrorMessage(null);
-
-    let currentId = '';
-    let currentLang: Language = 'hi';
-    let currentCareMode: CareMode = 'MODERN';
-
-    try {
-      const storedId = localStorage.getItem('medisaarthi_current_patient_id');
-      const storedLang = localStorage.getItem('medisaarthi_selected_lang');
-      if (storedId) currentId = storedId;
-      if (storedLang === 'en' || storedLang === 'hi') currentLang = storedLang;
-      const storedMode = localStorage.getItem('medisaarthi_care_mode');
-      if (storedMode === 'MODERN' || storedMode === 'AYUSH') currentCareMode = storedMode;
-    } catch {}
-
-    setLanguage(currentLang);
-    setCareMode(currentCareMode);
-
-    try {
-      if (!currentId) { router.replace('/patient/identify'); return; }
-      const p = await getPatient(currentId);
-      if (!p) throw new Error('Your patient record could not be found. Please sign in again.');
-      setPatient(p);
-
-      const consentId = localStorage.getItem('medisaarthi_current_consent_id');
-      if (!consentId) {
-        router.replace('/patient/consent');
-        return;
-      }
-      const startRes = await startInterviewSession(p.patient_id, currentLang, consentId, currentCareMode);
-      setInterviewId(startRes.interview_id);
-      setRevision(startRes.revision);
-
+  useEffect(() => {
+    let cancelled = false;
+    async function initialize() {
       try {
-        localStorage.setItem('medisaarthi_current_interview_id', startRes.interview_id);
-      } catch {}
-
-      const snapshot = await getIntakeSnapshot(startRes.interview_id);
-      const initialQ = snapshot.next_question?.text || '';
-      setLanguage(snapshot.language);
-      setRevision(snapshot.revision);
-      setCompletionPercentage(snapshot.completion.completion_percentage);
-      setSafetyFlags(snapshot.priority_flags);
-      setQuestionCount(snapshot.answers.length + 1);
-      setInterviewCompleted(snapshot.status !== 'ACTIVE');
-      setExtractedData({ chief_complaint: String(snapshot.clinical_state.chief_complaint || ''), duration: String(snapshot.clinical_state.duration || ''), severity: String(snapshot.clinical_state.severity ?? ''), location: String(snapshot.clinical_state.location || ''), associated_symptoms: Object.entries(snapshot.clinical_state).filter(([,value]) => value === true).map(([field]) => field.replaceAll('_',' ')) });
-
-      setCurrentQuestion(initialQ);
-
-      const initialMsg: InterviewMessage = {
-        id: `msg-${Date.now()}`,
-        sender: 'ai',
-        text: initialQ,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages([...snapshot.answers.flatMap(answer => ([
-        { id: `${answer.answer_id}-question`, sender: 'ai' as const, text: answer.question_text, timestamp: answer.created_at },
-        { id: answer.answer_id, sender: 'patient' as const, text: answer.answer_text, timestamp: answer.created_at },
-      ])), ...(initialQ ? [initialMsg] : [])]);
-      setIsInitializing(false);
-
-      // Auto-speak initial question: speaking and listening is the default!
-      // Audio starts only after an explicit Listen gesture; browser autoplay is not assumed.
-    } catch (err: any) {
-      setIsInitializing(false);
-      setErrorMessage(
-        isHindi
-          ? 'सर्वर से कनेक्ट करने में असमर्थ। कृपया जांचें कि बैकएंड चालू है और पुनः प्रयास करें।'
-          : 'Unable to connect to the Medisaarthi server. Please ensure the backend is running and try again.'
-      );
-    } finally { initializingRef.current = false; setIsInitializing(false); }
-  };
-
-  useEffect(() => {
-    initializeInterview();
-  }, []);
-
-  // Cleanup timers, microphone streams, and speech synthesis on unmount.
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      uploadRef.current?.abort();
-      if (mediaRecorderRef.current) {
-        mediaRecorderRef.current.onstop = null;
-        mediaRecorderRef.current.ondataavailable = null;
-        if (mediaRecorderRef.current.state !== 'inactive') mediaRecorderRef.current.stop();
+        const patient = localStorage.getItem('medisaarthi_current_patient_id');
+        const consent = localStorage.getItem('medisaarthi_current_consent_id');
+        if (!patient || !consent) { router.replace(!patient ? '/patient/identify' : '/patient/consent'); return; }
+        const lang = localStorage.getItem('medisaarthi_selected_lang') === 'en' ? 'en' : 'hi';
+        const mode = localStorage.getItem('medisaarthi_care_mode') === 'AYUSH' ? 'AYUSH' : 'MODERN';
+        const start = await startInterviewSession(patient, lang, consent, mode);
+        const current = await getIntakeSnapshot(start.interview_id);
+        if (cancelled) return;
+        localStorage.setItem('medisaarthi_current_interview_id', start.interview_id);
+        setSnapshot(current);
+      } catch (err) {
+        if (!cancelled) { setError(err instanceof Error ? err.message : 'Unable to load your interview.'); setPhase('AI_ERROR'); }
       }
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      if (streamRef.current) {
-        try {
-          streamRef.current.getTracks().forEach((t) => t.stop());
-        } catch {}
-      }
-      stopSpeaking();
-    };
-  }, []);
-
-  // Focus input whenever question changes
-  useEffect(() => {
-    if (!isInitializing && !isSubmitting && !isProcessingVoice && !interviewCompleted) {
-      inputRef.current?.focus();
     }
-  }, [currentQuestion, isInitializing, isSubmitting, isProcessingVoice, interviewCompleted]);
+    void initialize();
+    return () => { cancelled = true; interrupt(); };
+  }, [router, interrupt]);
 
-  // Helper to sync extracted facts from backend into ExtractedSymptomData UI state
-  const updateExtractedFromFacts = (facts: ExtractedFactItem[]) => {
-    setExtractedData((prev) => {
-      const next = { ...prev };
-      for (const f of facts) {
-        if (f.field_name === 'chief_complaint') next.chief_complaint = f.value;
-        else if (f.field_name === 'duration') next.duration = f.value;
-        else if (f.field_name === 'severity') next.severity = f.value;
-        else if (f.field_name === 'location') next.location = f.value;
-        else if (f.field_name === 'associated_symptoms') {
-          if (!next.associated_symptoms.includes(f.value)) {
-            next.associated_symptoms = [...next.associated_symptoms, f.value];
-          }
-        }
+  useEffect(() => {
+    const pauseOnHidden = () => { if (document.hidden) { interrupt(); setPaused(true); } };
+    document.addEventListener('visibilitychange', pauseOnHidden);
+    return () => document.removeEventListener('visibilitychange', pauseOnHidden);
+  }, [interrupt]);
+
+  useEffect(() => {
+    if (!snapshot || paused || typing || editing) return;
+    const controller = new AbortController(); active.current = controller;
+    const signal = controller.signal;
+    const current = snapshot;
+    const isHindi = current.language === 'hi';
+    const say = async (text: string) => {
+      if (signal.aborted) return false;
+      setSpokenText(text); setPhase('ASKING');
+      const result = await speak(text, current.language);
+      if (signal.aborted || result === 'cancelled') return false;
+      if (result === 'unavailable') {
+        setPhase('TTS_ERROR'); setPaused(true);
+        setError(isHindi ? 'आवाज़ चालू करने के लिए शुरू करें दबाएँ। आप लिख भी सकते हैं।' : 'Tap Start to enable sound. You can also type your answer.');
+        return false;
       }
-      return next;
-    });
-  };
-
-  // 3. Submit Patient Text Answer to Backend
-  const handleSendResponse = async (textToSend?: string) => {
-    const message = (textToSend !== undefined ? textToSend : inputText).trim();
-    if (!message || submitRef.current || isSubmitting || isProcessingVoice || isRecordingRef.current || requestingMicRef.current || !interviewId || interviewCompleted) return;
-    submitRef.current = true;
-
-    stopSpeaking();
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    // Append patient message to transcript
-    const patientMsg: InterviewMessage = {
-      id: `pat-${Date.now()}`,
-      sender: 'patient',
-      text: message,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      await delay(voiceConfig.echoTailMs, signal);
+      return !signal.aborted;
     };
-    const updatedMessages = [...messages, patientMsg];
-
-    try {
-      // Call Backend POST /interview/respond
-      const respondRes = await respondToInterviewSession(interviewId, message, revision);
-      setRevision(respondRes.revision);
-      setInputText('');
-      setLastTranscript(null);
-      setCompletionPercentage(respondRes.completion?.completion_percentage || 0);
-      setAiWarning(respondRes.ai_warning || null);
-      const snapshot = await getIntakeSnapshot(interviewId);
-      setSafetyFlags(snapshot.priority_flags);
-
-      if (respondRes.extracted_facts && respondRes.extracted_facts.length > 0) {
-        updateExtractedFromFacts(respondRes.extracted_facts);
-      }
-
-      const nextQText = respondRes.next_question?.text || '';
-      setCurrentQuestion(nextQText);
-      setQuestionCount((c) => c + 1);
-
-      const aiReplyMsg: InterviewMessage = {
-        id: `ai-${Date.now()}`,
-        sender: 'ai',
-        text: nextQText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages([...updatedMessages, aiReplyMsg]);
-
-      if (voiceMode && nextQText) {
-        speakQuestion(nextQText);
-      }
-
-      // If backend reports completion
-      if (respondRes.interview_completed || respondRes.status === 'PATIENT_REVIEW') {
-        setInterviewCompleted(true);
-      }
-      setIsSubmitting(false);
-    } catch (err: any) {
-      setIsSubmitting(false);
-      setErrorMessage(
-        isHindi
-          ? 'उत्तर भेजने में समस्या आई। कृपया पुनः प्रयास करें।'
-          : 'Could not send response. Please try again.'
-      );
-    } finally { submitRef.current = false; setIsSubmitting(false); }
-  };
-
-  // Voice is recorded in the browser and transcribed by the authenticated local-STT API.
-  const handleStartRecording = async () => {
-    if (requestingMicRef.current || isRecordingRef.current || isRecording || isProcessingVoice || isSubmitting || interviewCompleted || inputText.trim()) return;
-    requestingMicRef.current = true;
-    setIsRequestingMic(true);
-
-    stopSpeaking();
-    setErrorMessage(null);
-    audioChunksRef.current = [];
-
-    // Capture microphone audio. The server is the sole source of the saved transcript.
-    try {
-      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-        setErrorMessage(
-          isHindi
-            ? 'माइक्रोफ़ोन एक्सेस की अनुमति नहीं दी गई। आप लिखकर उत्तर दे सकते हैं।'
-            : 'Microphone access was not allowed. You can type your answer instead.'
-        );
+    async function runTurn() {
+      setError('');
+      if (safetyKey && safetyKey !== acknowledged) {
+        const message = isHindi
+          ? 'आपकी बताई तकलीफ के लिए तुरंत स्वास्थ्य कर्मचारी की मदद ज़रूरी है। कृपया अभी कर्मचारी को बुलाएँ। हम बातचीत रोक रहे हैं।'
+          : 'What you have described needs prompt attention from a healthcare professional. Please ask a member of staff for help now. We will pause here.';
+        await say(message);
+        if (!signal.aborted) setPhase('SAFETY_PAUSE');
         return;
       }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!mountedRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-      streamRef.current = stream;
-      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4']
-        .find((candidate) => MediaRecorder.isTypeSupported(candidate));
-      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
+      if (current.status !== 'ACTIVE') {
+        const message = isHindi ? 'धन्यवाद। आपकी बताई जानकारी डॉक्टर की समीक्षा के लिए एकत्र हो गई है। अब आप इसे देख सकते हैं।'
+          : 'Thank you. I have collected what you shared for your doctor to review. You can now check your information.';
+        if (await say(message)) {
+          setPhase('COMPLETED');
+          await delay(2500, signal);
+          if (!signal.aborted) router.push('/patient/review');
         }
-      };
-
-      mediaRecorder.onstop = async () => {
-        isRecordingRef.current = false;
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        // Stop stream tracks
-        stream.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-        if (!mountedRef.current) return;
-        setIsRecording(false);
-
-        const actualMimeType = mediaRecorder.mimeType || 'audio/webm';
-        const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
-        if (audioBlob.size > 0) {
-          await handleSendVoiceAudio(audioBlob, actualMimeType);
-        } else {
-          setErrorMessage(isHindi ? 'रिकॉर्डिंग खाली है। कृपया फिर से बोलें।' : 'The recording was empty. Please record your answer again.');
-          setIsProcessingVoice(false);
+        return;
+      }
+      if (!current.next_question || !await say(current.next_question.text)) return;
+      const capture = new VoiceCapture();
+      let attempts = 0;
+      const parts: Promise<string>[] = [];
+      while (!signal.aborted) {
+        setPhase('LISTENING');
+        let recording;
+        try { recording = await capture.listen(signal, () => setPhase('RECORDING'), setLevel, chunk => {
+          const transcription = transcribeInterviewAudio(current.interview_id, chunk.audio, chunk.filename, current.revision, signal).then(result => result.transcript);
+          void transcription.catch(() => undefined);
+          parts.push(transcription);
+        }); }
+        catch {
+          if (!signal.aborted) {
+            setPhase('MICROPHONE_ERROR'); setPaused(true);
+            setError(isHindi ? 'माइक्रोफ़ोन की अनुमति दें और फिर शुरू करें। या लिखकर उत्तर दें।' : 'Allow microphone access and press Start again, or type your answer.');
+          }
+          return;
         }
-      };
-      mediaRecorder.onerror = () => {
-        mediaRecorder.onstop = null;
-        stream.getTracks().forEach(track => track.stop());
-        isRecordingRef.current = false;
-        if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-        setIsRecording(false); setIsProcessingVoice(false);
-        setErrorMessage(isHindi ? 'रिकॉर्डिंग विफल हुई। फिर प्रयास करें या लिखें।' : 'Recording failed. Please retry or type your answer.');
-      };
-
-      isRecordingRef.current = true;
-      mediaRecorder.start(250); // Slice data every 250ms
-      setIsRecording(true);
-      setRecordingSeconds(0);
-
-      // Start duration counter
-      const recordingStarted = Date.now();
-      timerIntervalRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - recordingStarted) / 1000);
-        setRecordingSeconds(elapsed);
-        if (elapsed >= 110) handleStopRecording();
-      }, 1000);
-    } catch (err: any) {
-      streamRef.current?.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-      isRecordingRef.current = false;
-      setIsRecording(false);
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-      setErrorMessage(
-        isHindi
-          ? 'माइक्रोफ़ोन एक्सेस की अनुमति नहीं दी गई। आप लिखकर उत्तर दे सकते हैं।'
-          : err?.name === 'NotFoundError' ? 'No microphone was found. Connect one or type your answer.' : err?.name === 'NotReadableError' ? 'The microphone is busy or unavailable. Close other recording apps and retry.' : 'Microphone access was not allowed. Allow it in your browser settings or type your answer.'
-      );
-    } finally { requestingMicRef.current = false; if (mountedRef.current) setIsRequestingMic(false); }
-  };
-
-  const handleStopRecording = () => {
-    if (!isRecordingRef.current && !isRecording) return;
-
-    isRecordingRef.current = false;
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
+        if (signal.aborted || recording.kind === 'cancelled') return;
+        if (recording.kind === 'silence' && !parts.length) {
+          if (!await say(isHindi ? 'आराम से बोलिए। जब आप तैयार हों, अपनी बात बताइए।' : 'Take your time. Whenever you are ready, you can tell me.')) return;
+          continue;
+        }
+        if ('audio' in recording) {
+          // Long responses transcribe completed chunks while capture continues. No turn is spent yet.
+          const chunk = transcribeInterviewAudio(current.interview_id, recording.audio, recording.filename, current.revision, signal)
+            .then(result => result.transcript);
+          void chunk.catch(() => undefined);
+          parts.push(chunk);
+        }
+        setPhase('TRANSCRIBING');
+        try {
+          const transcript = (await Promise.all(parts)).join(' ').trim(); parts.length = 0;
+          if (signal.aborted) return;
+          if (!transcript || !/[\p{L}\p{N}]/u.test(transcript)) throw new Error('Unclear speech');
+          setLastTranscript(transcript); setDraft(transcript); setPhase('VALIDATING');
+          // Optional correction; the ordinary conversation never waits for a button.
+          await delay(2200, signal);
+          if (signal.aborted) return;
+          setPhase('PROCESSING'); submitting.current = true;
+          try {
+            const next = await sendIntakeAnswer(current.interview_id, transcript, current.revision, signal);
+            if (!signal.aborted) { setDraft(''); setPhase('NEXT_QUESTION'); setSnapshot(next); }
+          } catch {
+            if (!signal.aborted) {
+              // A timed-out response may already be saved; reconcile before offering any retry.
+              const latest = await getIntakeSnapshot(current.interview_id).catch(() => null);
+              if (signal.aborted) return;
+              if (latest && latest.revision !== current.revision) { setSnapshot(latest); setDraft(''); }
+              else { setError(isHindi ? 'उत्तर सुरक्षित नहीं हुआ। इसे नीचे देखकर फिर भेजें।' : 'Your answer was not saved. Please review it below and try again.'); setEditing(true); setPhase('AI_ERROR'); }
+            }
+          } finally { submitting.current = false; }
+          return;
+        } catch (err) {
+          parts.length = 0;
+          if (signal.aborted) return;
+          if (err instanceof ApiError && err.status === 409) { setSnapshot(await getIntakeSnapshot(current.interview_id)); return; }
+          setPhase('TRANSCRIPTION_ERROR'); attempts++;
+          if (attempts >= 3 || (err instanceof ApiError && err.status === 503)) {
+            setPaused(true); setError(isHindi ? 'आवाज़ साफ़ नहीं आ रही है। फिर कोशिश करें या लिखें।' : 'We are having trouble hearing you. Try again or type your answer.');
+            return;
+          }
+          if (!await say(isHindi ? 'माफ़ कीजिए, आपकी बात साफ़ नहीं सुन पाया। कृपया फिर से बोलिए।' : 'I am sorry, I did not quite catch that. Could you say that again?')) return;
+        }
+      }
     }
+    void runTurn().catch(() => {
+      if (!signal.aborted) { setPhase('AI_ERROR'); setPaused(true); setError(isHindi ? 'थोड़ा रुककर फिर कोशिश करें।' : 'Please take a moment and try again.'); }
+    });
+    return () => { controller.abort(); stop(); };
+  }, [snapshot, paused, typing, editing, retry, safetyKey, acknowledged, speak, stop, router]);
 
-    setIsRecording(false);
-    setIsProcessingVoice(true);
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    } else {
-      setErrorMessage(isHindi ? 'रिकॉर्डिंग उपलब्ध नहीं है। कृपया फिर से प्रयास करें।' : 'The microphone recording is unavailable. Please record your answer again.');
-      setIsProcessingVoice(false);
-    }
-  };
-
-  // Upload microphone audio to the local transcription endpoint.
-  const handleSendVoiceAudio = async (
-    audioBlob: Blob,
-    mimeType: string,
-  ) => {
-    if (!interviewId || interviewCompleted) return;
-
-    setIsProcessingVoice(true);
-    setErrorMessage(null);
-
+  async function resume() {
+    interrupt();
+    await unlock();
+    if (snapshot) {
+      try { setSnapshot(await getIntakeSnapshot(snapshot.interview_id)); }
+      catch { setError(hi ? 'सेवा से संपर्क नहीं हो पाया।' : 'Unable to reconnect. Please try again.'); return; }
+    } else { window.location.reload(); return; }
+    setError(''); setEditing(false); setTyping(false); setPaused(false); setRetry(n => n + 1);
+  }
+  async function saveTyped() {
+    if (!snapshot || !draft.trim() || submitting.current) return;
+    interrupt(); submitting.current = true; setPhase('PROCESSING'); setError('');
     try {
-      const controller = new AbortController();
-      uploadRef.current = controller;
-      const voiceRes = await transcribeInterviewAudio(
-        interviewId,
-        audioBlob,
-        `patient_voice.${mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'm4a' : 'wav'}`,
-        revision, controller.signal
-      );
-      if (!mountedRef.current) return;
-      const transcript = voiceRes.transcript;
-      setLastTranscript(transcript);
-      setInputText(transcript);
-      inputRef.current?.focus();
-      setIsProcessingVoice(false);
-    } catch (err: any) {
-      if (!mountedRef.current) return;
-      setIsProcessingVoice(false);
-      setErrorMessage(
-        err?.message ||
-          (isHindi
-            ? 'आवाज़ पहचानने में समस्या आई। कृपया पुनः बोलें या लिखकर उत्तर दें।'
-            : 'Could not process voice recording. Please speak clearly or type your answer.')
-      );
-    }
-  };
+      const next = await sendIntakeAnswer(snapshot.interview_id, draft.trim(), snapshot.revision);
+      setLastTranscript(draft.trim()); setDraft(''); setSnapshot(next); setEditing(false);
+      setPaused(false); setPhase(next.status === 'ACTIVE' ? 'IDLE' : 'COMPLETED');
+    } catch (err) {
+      const latest = await getIntakeSnapshot(snapshot.interview_id).catch(() => null);
+      if (latest && latest.revision !== snapshot.revision) { setSnapshot(latest); setDraft(''); setEditing(false); }
+      else { setError(err instanceof Error ? err.message : 'Please try again.'); setPhase('AI_ERROR'); }
+    } finally { submitting.current = false; }
+  }
 
-  // 6. Complete Interview & Navigate to Screen 6
-  const handleFinishInterview = async () => {
-    stopSpeaking();
-    router.push('/patient/review');
-  };
+  const visiblePhase = speech.speaking ? 'SPEAKING' : phase;
+  const avatarState = speech.speaking ? 'speaking' : phase === 'LISTENING' || phase === 'RECORDING' ? 'listening' :
+    ['TRANSCRIBING', 'PROCESSING', 'VALIDATING', 'ASKING', 'NEXT_QUESTION'].includes(phase) ? 'thinking' :
+    phase.endsWith('ERROR') || phase === 'SAFETY_PAUSE' ? 'error' : 'waiting';
+  const question = spokenText || snapshot?.next_question?.text || (hi ? 'आपका स्वागत है।' : 'Welcome. Make yourself comfortable.');
+  const buttonClass = 'inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-teal-900/15 bg-white/80 px-5 py-3 text-base font-medium text-teal-950 transition hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700';
 
-  return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-between text-slate-900">
-      <PatientHeader currentStep={4} totalSteps={4} stepName="Interview" />
-
-      <main className="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8 w-full flex flex-col gap-6 justify-center">
-        {careMode === 'AYUSH' && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-center text-sm font-semibold text-emerald-900">AYUSH history mode is active. Your responses are patient-reported information for practitioner review.</p>}
-        {/* Progress Header */}
-        <InterviewProgress
-          collectedCount={questionCount}
-          completionPercentage={completionPercentage}
-          language={language}
-        />
-        {safetyFlags.length > 0 && <div role="alert" className="rounded-2xl border-2 border-rose-400 bg-rose-50 p-4 text-rose-950" id="clinical-safety-alert">
-          <p className="font-bold">{isHindi ? 'तत्काल चिकित्सकीय सहायता लें। इंटरव्यू पूरा होने का इंतज़ार न करें।' : 'Seek urgent medical assessment. Do not wait to finish this interview.'}</p>
-          {safetyFlags.map(flag => <p key={flag.code} className="mt-1 text-sm">{flag.message}</p>)}
-          <p className="mt-2 text-xs">{isHindi ? 'यह सुरक्षा संकेत है, निदान नहीं।' : 'This is a safety alert, not a diagnosis.'}</p>
+  return <main lang={language} className="relative flex min-h-dvh flex-col overflow-x-hidden bg-[#eef5f2] text-[#193c3c]" data-testid="hands-free-interview" data-state={visiblePhase}>
+    <header className="z-10 flex items-center justify-between gap-3 px-5 py-4 sm:px-10">
+      <div><p className="font-semibold tracking-wide">MediKiosk</p><p className="text-sm text-teal-800">{hi ? 'आपके साथ, आपकी देखभाल के लिए' : 'Here with you, for your care'}</p></div>
+      <button className={buttonClass} onClick={() => { interrupt(); setPaused(true); setHelp(true); }}><HelpCircle size={20}/>{hi ? 'मदद' : 'Help'}</button>
+    </header>
+    <div className="pointer-events-none absolute left-1/2 top-24 h-[50vh] w-[min(90vw,700px)] -translate-x-1/2 rounded-full bg-white/70 blur-3xl"/>
+    <section className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-5">
+      <div className="h-[48dvh] min-h-64 w-full sm:h-[55dvh]"><TalkingAvatar immersive mouth={speech.mouth} state={avatarState} language={language}/></div>
+      <div className="relative z-10 -mt-1 w-full rounded-[2rem] bg-white/85 px-5 py-5 text-center shadow-[0_-10px_40px_10px_#eef5f2] sm:px-12">
+        <p id="active-question-text" className="mx-auto max-w-3xl text-2xl font-medium leading-relaxed sm:text-3xl">{typing || editing ? snapshot?.next_question?.text || question : question}</p>
+        <div role="status" aria-live="polite" className="mt-5 flex min-h-8 items-center justify-center gap-3 text-lg text-teal-700">
+          {(phase === 'LISTENING' || phase === 'RECORDING') && <span className="flex h-7 items-center gap-1" aria-hidden="true">{[.5, .85, 1, .7, .4].map((scale, i) => <span key={i} className="w-1 rounded-full bg-teal-600 transition-all" style={{ height: 5 + level * 28 * scale }}/>)}</span>}
+          {LABELS[visiblePhase][hi ? 1 : 0]}
+        </div>
+        {phase === 'SAFETY_PAUSE' && <div id="clinical-safety-alert" role="alert" className="mx-auto mt-5 max-w-2xl rounded-2xl border border-amber-300 bg-amber-50 p-5 text-left text-lg text-amber-950">
+          <p>{hi ? 'अभी कर्मचारी को बुलाएँ। सहायक ने कोई कर्मचारी या आपात सेवा नहीं बुलाई है।' : 'Ask a member of staff for help now. This assistant has not contacted staff or emergency services.'}</p>
+          <button className={buttonClass + ' mt-4'} onClick={() => { setAcknowledged(safetyKey); setRetry(n => n + 1); }}>{hi ? 'मदद पास है — बातचीत जारी रखें' : 'Help is here — resume conversation'}</button>
         </div>}
-        {aiWarning && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{aiWarning}</p>}
-
-        {/* Error Banner */}
-        {errorMessage && (
-          <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-900 flex items-center justify-between gap-3 animate-in fade-in shadow-sm" id="interview-error-banner">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-              <span className="text-sm font-semibold">{errorMessage}</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={initializeInterview}
-              leftIcon={<RefreshCw className="w-4 h-4" />}
-              className="bg-white border-rose-300 text-rose-800 hover:bg-rose-100 shrink-0"
-              id="retry-interview-button"
-            >
-              {isHindi ? 'पुनः प्रयास करें (Retry)' : 'Retry'}
-            </Button>
-          </div>
-        )}
-
-        {/* Initializing Loading State */}
-        {isInitializing ? (
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-10 sm:p-14 text-center space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-sky-600 text-white mx-auto flex items-center justify-center animate-pulse shadow-md">
-              <Bot className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900">
-              {isHindi ? 'इंटरव्यू शुरू हो रहा है...' : 'Starting your interview...'}
-            </h2>
-            <p className="text-slate-500 text-sm">
-              {isHindi
-                ? 'कृपया प्रतीक्षा करें, हम आपके डॉक्टर के लिए सत्र तैयार कर रहे हैं।'
-                : 'Connecting with the clinical engine. Please wait...'}
-            </p>
-          </div>
-        ) : interviewCompleted ? (
-          /* Interview Completed Banner & CTA */
-          <div className="bg-white rounded-3xl border-2 border-emerald-500 shadow-xl p-8 sm:p-12 text-center space-y-6 animate-in fade-in">
-            <div className="w-20 h-20 rounded-3xl bg-emerald-600 text-white mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/20 ring-8 ring-emerald-50">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-black tracking-wider uppercase text-emerald-700">
-                {isHindi ? 'इंटरव्यू संपन्न' : 'INTERVIEW COMPLETE'}
-              </div>
-              <h2 className="text-3xl font-black text-slate-900">
-                {isHindi ? 'धन्यवाद! आपकी जानकारी दर्ज कर ली गई है।' : 'Thank you! Your information is recorded.'}
-              </h2>
-              <p className="text-base text-slate-600 max-w-lg mx-auto">
-                {isHindi
-                  ? 'आपकी सभी जानकारियां सुरक्षित रूप से संकलित कर डॉक्टर की समीक्षा के लिए तैयार कर दी गई हैं।'
-                  : 'Your pre-consultation information has been recorded and will be available to the doctor for review.'}
-              </p>
-            </div>
-
-            <div className="pt-4 max-w-md mx-auto">
-              <Button
-                variant="success"
-                size="xl"
-                onClick={handleFinishInterview}
-                rightIcon={<ArrowRight className="w-5 h-5" />}
-                className="w-full text-lg font-bold shadow-lg rounded-2xl py-4 min-h-[60px]"
-                id="view-completed-button"
-              >
-                {isHindi ? 'जानकारी जाँचें और आगे बढ़ें' : 'Review & Continue'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          /* Main Prominent Single Question Card */
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-            {/* Left 2 Cols: The Active Question & Voice / Text Controls */}
-            <div className="md:col-span-2 bg-white rounded-3xl border-2 border-sky-300 shadow-lg p-6 sm:p-8 space-y-6">
-              <TalkingAvatar mouth={speech.mouth} state={isRecording ? 'listening' : isSubmitting || isProcessingVoice || speech.loading ? 'thinking' : isSpeaking ? 'speaking' : 'waiting'} language={language} />
-              {speech.notice && <p role="status" className="text-xs text-amber-800">{speech.notice}</p>}
-              {isRequestingMic && <p role="status" className="text-sm text-sky-800">{isHindi ? 'माइक्रोफ़ोन की अनुमति दें…' : 'Waiting for microphone permission…'}</p>}
-              {/* Question Header & Voice Mode Switcher */}
-              <div className="flex flex-wrap items-center justify-between border-b border-slate-100 pb-3 gap-2">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold shadow-xs">
-                    <Bot className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-sky-900 block">
-                      MediKiosk AI Assistant
-                    </span>
-                    <span className="text-xs text-slate-500 block">
-                      {isHindi ? `मरीज: ${patient?.name || ''}` : `Patient: ${patient?.name || ''}`}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center flex-wrap gap-2">
-                  {/* Switch to Writing / Typing Option */}
-                  {voiceMode ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceMode(false);
-                        stopSpeaking();
-                        setTimeout(() => inputRef.current?.focus(), 150);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors cursor-pointer shadow-2xs"
-                      id="switch-to-typing-btn"
-                    >
-                      ✍️ {isHindi ? 'लिखकर उत्तर दें' : 'Switch to Typing'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceMode(true);
-                        speakQuestion(currentQuestion);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-sky-100 hover:bg-sky-200 text-sky-900 border border-sky-300 transition-colors cursor-pointer shadow-2xs"
-                      id="switch-to-voice-btn"
-                    >
-                      🎙️ {isHindi ? 'बोलकर उत्तर दें (डिफ़ॉल्ट)' : 'Switch to Voice (Default)'}
-                    </button>
-                  )}
-
-                  {/* Voice Mode Toggle Button (Preserved for tests & explicit toggle) */}
-                  <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl">
-                    <Mic className={`w-3.5 h-3.5 ${voiceMode ? 'text-rose-600 animate-pulse' : 'text-slate-400'}`} />
-                    <span className="text-xs font-bold text-slate-700">
-                      {isHindi ? 'वॉइस मोड:' : 'Voice Mode:'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const newMode = !voiceMode;
-                        setVoiceMode(newMode);
-                        if (!newMode) stopSpeaking();
-                        else speakQuestion(currentQuestion);
-                      }}
-                      className={`px-2.5 py-0.5 rounded-lg text-xs font-extrabold transition-colors cursor-pointer ${
-                        voiceMode
-                          ? 'bg-rose-600 text-white shadow-xs'
-                          : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                      }`}
-                      id="voice-mode-toggle-btn"
-                    >
-                      {voiceMode ? 'ON' : 'OFF'}
-                    </button>
-                  </div>
-
-                  <span className="px-3 py-1 rounded-xl bg-sky-100 text-sky-800 text-xs font-bold">
-                    {isHindi ? `प्रश्न #${questionCount}` : `Question #${questionCount}`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Active Speaking Banner when AI is reading out */}
-              {isSpeaking && (
-                <div className="p-3.5 rounded-2xl bg-sky-50 border-2 border-sky-300 text-sky-950 flex items-center justify-between gap-3 animate-in fade-in shadow-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex items-end gap-1 h-5">
-                      <span className="w-1 bg-sky-600 rounded-full animate-bounce h-3" />
-                      <span className="w-1 bg-sky-600 rounded-full animate-bounce h-5" />
-                      <span className="w-1 bg-sky-600 rounded-full animate-bounce h-4" />
-                      <span className="w-1 bg-sky-600 rounded-full animate-bounce h-2" />
-                    </div>
-                    <span className="text-xs sm:text-sm font-bold">
-                      {isHindi ? '🔊 AI सवाल बोलकर सुना रहा है (सुनें)...' : '🔊 AI is reading the question aloud (listening)...'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={stopSpeaking}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 cursor-pointer shadow-2xs"
-                  >
-                    {isHindi ? 'रोकें (Mute)' : 'Mute'}
-                  </button>
-                </div>
-              )}
-
-              {/* The Prominent Active Question */}
-              <div className="space-y-2.5 py-1">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    {isHindi ? 'वर्तमान प्रश्न:' : 'Current Question:'}
-                  </div>
-
-                  {/* Listen Question Button */}
-                  <button
-                    type="button"
-                    onClick={() => speakQuestion(currentQuestion)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 transition-colors cursor-pointer shadow-2xs"
-                    id="listen-question-btn"
-                  >
-                    <Volume2 className={`w-4 h-4 ${isSpeaking ? 'text-sky-600 animate-pulse' : 'text-sky-700'}`} />
-                    <span>{isSpeaking ? (isHindi ? 'बोल रहे हैं...' : 'Speaking...') : (isHindi ? '🔊 सुनें (Listen)' : '🔊 Listen')}</span>
-                  </button>
-                </div>
-
-                <h1
-                  className="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-snug tracking-tight"
-                  id="active-question-text"
-                >
-                  {currentQuestion}
-                </h1>
-                <p className="text-xs text-slate-500 font-medium">
-                  {voiceMode
-                    ? isHindi
-                      ? 'डिफ़ॉल्ट वॉइस मोड: माइक बटन दबाकर बोलें। आप कभी भी नीचे लिखकर भी उत्तर दे सकते हैं।'
-                      : 'Default Voice Mode: Tap Speak to answer. You can also switch to typing anytime below.'
-                    : isHindi
-                    ? 'नीचे दिए गए बॉक्स में अपना उत्तर लिखें और आगे बढ़ें दबाएं।'
-                    : 'Type your answer below and press Continue to proceed.'}
-                </p>
-              </div>
-
-              {/* Voice Mode Primary Controller (Step 4C) - Prominent Default */}
-              {voiceMode && (
-                <div className="p-5 rounded-2xl bg-gradient-to-tr from-sky-50 to-indigo-50/60 border-2 border-sky-200 space-y-4 shadow-sm" id="voice-interaction-panel">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-sky-900 flex items-center gap-2">
-                      <Mic className="w-4 h-4 text-sky-600" />
-                      <span>{isHindi ? 'ध्वनि उत्तर (Voice Input - डिफ़ॉल्ट)' : 'Voice Input (Default)'}</span>
-                    </span>
-                    {isRecording && (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 border border-rose-300 text-rose-900 text-xs font-bold animate-pulse" id="recording-indicator">
-                        <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
-                        <span>{isHindi ? `रिकॉर्डिंग... (${recordingSeconds}s)` : `Recording... (${recordingSeconds}s)`}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Audio Wave Visualizer during Active Recording */}
-                  {isRecording && (
-                    <div className="flex items-center justify-center gap-1.5 py-1">
-                      <span className="w-1.5 h-6 bg-rose-500 rounded-full animate-pulse" />
-                      <span className="w-1.5 h-10 bg-rose-600 rounded-full animate-bounce" />
-                      <span className="w-1.5 h-14 bg-rose-500 rounded-full animate-pulse" />
-                      <span className="w-1.5 h-8 bg-rose-600 rounded-full animate-bounce" />
-                      <span className="w-1.5 h-5 bg-rose-500 rounded-full animate-pulse" />
-                      <span className="text-xs font-bold text-rose-700 ml-2">
-                        {isHindi ? '🎙️ आपकी आवाज़ सुनी जा रही है...' : '🎙️ Listening to your voice...'}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Main Record / Stop Action Bar */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-1">
-                    {!isRecording ? (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="xl"
-                        onClick={handleStartRecording}
-                        disabled={isProcessingVoice || isSubmitting || isRequestingMic || !!inputText.trim()}
-                        leftIcon={<Mic className="w-6 h-6 text-white" />}
-                        className="w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-lg bg-sky-600 hover:bg-sky-700 shadow-md min-h-[56px]"
-                        id="voice-record-btn"
-                      >
-                        {isProcessingVoice
-                          ? isHindi
-                            ? '⏳ आवाज़ प्रोसेस हो रही है...'
-                            : '⏳ Processing Audio...'
-                          : isHindi
-                          ? '🎤 बोलें (Speak)'
-                          : '🎤 Speak'}
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="xl"
-                        onClick={handleStopRecording}
-                        leftIcon={<Square className="w-5 h-5 text-white fill-white" />}
-                        className="w-full sm:w-auto px-8 py-4 rounded-2xl font-black text-lg bg-rose-600 hover:bg-rose-700 shadow-lg animate-pulse min-h-[56px]"
-                        id="voice-stop-btn"
-                      >
-                        {isHindi ? '⏹ रोकें और जाँचें' : '⏹ Stop & Review'}
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Quick toggle to writing */}
-                  <div className="text-center pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setVoiceMode(false);
-                        stopSpeaking();
-                        setTimeout(() => inputRef.current?.focus(), 150);
-                      }}
-                      className="text-xs font-semibold text-slate-500 hover:text-sky-700 hover:underline cursor-pointer"
-                    >
-                      {isHindi ? '✍️ या लिखकर उत्तर देने के लिए यहाँ क्लिक करें' : '✍️ Or click here to switch to typing'}
-                    </button>
-                  </div>
-
-                  {/* Live Transcript Display Card */}
-                  {lastTranscript && (
-                    <div className="p-3.5 rounded-xl bg-white border border-sky-200 text-xs text-slate-800 shadow-2xs space-y-1 animate-in fade-in" id="voice-transcript-card">
-                      <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400 block">
-                        {isHindi ? 'मसौदा — नीचे सुधारें और आगे बढ़ें दबाएँ। अभी सेव नहीं हुआ।' : 'Draft — correct the text below, then Continue to save. Not submitted yet.'}
-                      </span>
-                      <p className="text-sm font-semibold text-sky-950 italic" id="voice-transcript-text">
-                        "{lastTranscript}"
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Writing Mode Active Notice (When voice mode is toggled off) */}
-              {!voiceMode && (
-                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-3 shadow-2xs animate-in fade-in">
-                  <div className="flex items-center gap-2">
-                    <span>✍️</span>
-                    <span className="font-medium">
-                      {isHindi
-                        ? 'टाइपिंग मोड सक्रिय है। आप कभी भी बोलकर उत्तर देने के लिए डिफ़ॉल्ट वॉइस मोड चालू कर सकते हैं।'
-                        : 'Writing mode is active. You can switch back to default voice mode anytime.'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVoiceMode(true);
-                      speakQuestion(currentQuestion);
-                    }}
-                    className="font-bold text-sky-800 hover:underline shrink-0 cursor-pointer"
-                  >
-                    {isHindi ? '🎙️ वॉइस मोड चालू करें' : '🎙️ Turn Voice On'}
-                  </button>
-                </div>
-              )}
-
-              {/* Processing Spinner */}
-              {(isSubmitting || isProcessingVoice) && (
-                <div className="p-4 rounded-2xl bg-sky-50 border border-sky-200 flex items-center gap-3 animate-pulse" id="processing-indicator">
-                  <div className="w-5 h-5 border-2 border-sky-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                  <span className="text-sm font-bold text-sky-900">
-                    {isProcessingVoice
-                      ? isHindi
-                        ? 'आवाज़ का विश्लेषण हो रहा है (Processing audio)...'
-                        : 'Transcribing speech & analyzing symptoms...'
-                      : isHindi
-                      ? 'कृपया प्रतीक्षा करें (Please wait)...'
-                      : 'Analyzing response. Please wait...'}
-                  </span>
-                </div>
-              )}
-
-              {/* Patient Text Answer Input Area (Seamless Fallback) */}
-              <div className="space-y-3 pt-2">
-                <label
-                  htmlFor="patient-answer-input"
-                  className="block text-xs font-bold uppercase tracking-wider text-slate-700"
-                >
-                  {isHindi ? 'या यहाँ लिखें (Or Type Your Answer):' : 'Or Type Your Answer:'}
-                </label>
-                <div className="relative">
-                  <input
-                    id="patient-answer-input"
-                    ref={inputRef}
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !isSubmitting && !isProcessingVoice && inputText.trim()) {
-                        handleSendResponse();
-                      }
-                    }}
-                    placeholder={
-                      isHindi
-                        ? 'यहाँ अपना उत्तर लिखें (उदा. 3 दिन से दर्द है)...'
-                        : 'Type your symptoms or answer here...'
-                    }
-                    disabled={isSubmitting || isProcessingVoice || isRecording || isRequestingMic}
-                    className="w-full px-5 py-4 rounded-2xl border-2 border-slate-300 focus:border-sky-600 focus:ring-4 focus:ring-sky-100 text-base sm:text-lg text-slate-900 font-medium placeholder-slate-400 bg-white transition-all shadow-inner"
-                  />
-                </div>
-
-                {/* Submit / Continue Button */}
-                <div className="flex items-center gap-3 pt-2">
-                  <Button
-                    variant="primary"
-                    size="xl"
-                    onClick={() => handleSendResponse()}
-                    disabled={!inputText.trim() || isSubmitting || isProcessingVoice || isRecording || isRequestingMic}
-                    rightIcon={<ArrowRight className="w-6 h-6" />}
-                    className="w-full text-lg font-bold shadow-md rounded-2xl py-4 min-h-[56px]"
-                    id="submit-answer-button"
-                  >
-                    {isSubmitting || isProcessingVoice
-                      ? isHindi
-                        ? 'प्रतीक्षा करें...'
-                        : 'Please wait...'
-                      : isHindi
-                      ? 'आगे बढ़ें / भेजें (Continue)'
-                      : 'Continue'}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Right 1 Col: Live Extracted Structured Data */}
-            <div className="md:col-span-1 space-y-4">
-              <ExtractedInfo data={extractedData} language={language} />
-
-              <div className="p-4 rounded-2xl bg-white border border-slate-200 text-xs text-slate-600 space-y-2 shadow-xs">
-                <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                  <HelpCircle className="w-4 h-4 text-sky-600" />
-                  <span>{isHindi ? 'मदद एवं वॉइस निर्देश' : 'Voice & Text Instructions'}</span>
-                </div>
-                <p className="leading-relaxed text-[12px]">
-                  {isHindi
-                    ? 'आप बोलकर या लिखकर अपनी भाषा में बता सकते हैं। वॉइस मोड चालू करने पर सवाल बोलकर भी सुनाया जाएगा।'
-                    : 'You can speak using the microphone or type your symptoms. When Voice Mode is ON, questions are also spoken aloud.'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 py-3 bg-white text-center text-xs text-slate-500">
-        Medisaarthi • AI Pre-Consultation Voice & Text Assistant
-      </footer>
-    </div>
-  );
+        {error && <p role="alert" className="mx-auto mt-4 max-w-2xl text-lg text-amber-900"><AlertCircle className="mr-2 inline" size={20}/>{error}</p>}
+        {typing && safetyKey && <p id="clinical-safety-alert" role="alert" className="mt-4 rounded-2xl bg-amber-50 p-4 text-lg text-amber-950">{hi ? 'आपकी बताई तकलीफ के लिए तुरंत स्वास्थ्य कर्मचारी से मदद लें।' : 'Please ask a healthcare professional for prompt help with the symptoms you reported.'}</p>}
+        {(typing || editing) && !completed && <form className="mx-auto mt-5 max-w-2xl" onSubmit={event => { event.preventDefault(); void saveTyped(); }}>
+          <label htmlFor="patient-answer-input" className="sr-only">{hi ? 'आपका उत्तर' : 'Your answer'}</label>
+          <textarea id="patient-answer-input" rows={3} className="w-full rounded-2xl border border-teal-200 bg-white p-4 text-xl" value={draft} onChange={e => setDraft(e.target.value)} autoFocus/>
+          <button type="submit" disabled={!draft.trim() || phase === 'PROCESSING'} className={buttonClass + ' mt-3'}><Check size={20}/>{hi ? 'यह उत्तर इस्तेमाल करें' : 'Use this answer'}</button>
+        </form>}
+        {lastTranscript && !typing && !editing && <div className="mx-auto mt-4 max-w-2xl text-base text-slate-600">
+          <p data-testid="last-transcript">“{lastTranscript}”</p>
+          {phase === 'VALIDATING' && <button className="min-h-12 px-4 underline underline-offset-4" onClick={() => { interrupt(); setEditing(true); }}>{hi ? 'सुधारें' : 'Correct transcription'}</button>}
+          {phase !== 'VALIDATING' && snapshot && snapshot.question_budget.answered > 0 && <button className="min-h-12 px-4 underline underline-offset-4" onClick={() => { interrupt(); router.push('/patient/review'); }}>{hi ? 'दर्ज जानकारी सुधारें' : 'Review or correct saved information'}</button>}
+        </div>}
+        {completed && <a id="view-completed-button" href="/patient/review" className={buttonClass + ' mt-4'}>{hi ? 'अपनी जानकारी देखें' : 'Review your information'}<ArrowRight size={20}/></a>}
+      </div>
+    </section>
+    <footer className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-4 px-5 py-5">
+      <div className="flex flex-wrap justify-center gap-3">
+        {phase !== 'SAFETY_PAUSE' && <>
+          <button className={buttonClass} onClick={() => { if (paused || typing || editing || phase.endsWith('ERROR')) void resume(); else { interrupt(); setPaused(true); setPhase('PAUSED'); } }}>
+            {paused || typing || editing || phase.endsWith('ERROR') ? <Play size={20}/> : <Pause size={20}/>}
+            {paused || typing || editing || phase.endsWith('ERROR') ? (hi ? 'शुरू करें' : 'Start') : (hi ? 'रुकें' : 'Pause')}
+          </button>
+          {!typing && !editing && !completed && <button id="switch-to-typing-btn" className={buttonClass} onClick={() => { interrupt(); setTyping(true); setPhase('IDLE'); }}><Keyboard size={20}/>{hi ? 'लिखकर उत्तर दें' : 'Type instead'}</button>}
+          {(typing || editing) && <button className={buttonClass} onClick={() => void resume()}><Mic size={20}/>{hi ? 'बोलकर उत्तर दें' : 'Return to conversation'}</button>}
+        </>}
+      </div>
+      <p className="text-center text-sm text-teal-800">{hi ? 'संक्षिप्त बातचीत · 5–10 प्रश्न' : 'A short conversation · 5–10 questions'}{snapshot ? ' · ' + snapshot.question_budget.answered + (hi ? ' उत्तर दिए' : ' answered') : ''}</p>
+      {snapshot?.ai_warning && <p className="max-w-xl text-center text-sm text-amber-900">{hi ? 'AI सेवा उपलब्ध नहीं है। आपके उत्तर डॉक्टर के लिए सुरक्षित हो रहे हैं।' : 'The AI service is unavailable. Your answers are still being saved for your doctor.'}</p>}
+      <div className="h-1 w-40 overflow-hidden rounded-full bg-teal-900/10" aria-hidden="true"><div className="h-full rounded-full bg-teal-600 transition-all duration-700" style={{ width: (completed ? 100 : (snapshot?.question_budget.answered || 0) * 10) + '%' }}/></div>
+    </footer>
+    {help && <div className="fixed inset-0 z-50 flex items-center justify-center bg-teal-950/40 p-6" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div className="max-w-lg rounded-3xl bg-white p-8"><h2 id="help-title" className="text-2xl font-semibold">{hi ? 'हम रुक गए हैं' : 'We have paused'}</h2><p className="my-5 text-xl">{hi ? 'कृपया पास के अस्पताल कर्मचारी को बुलाएँ। इस स्क्रीन से कर्मचारी को संदेश नहीं भेजा गया है। आप लिखकर भी उत्तर दे सकते हैं।' : 'Please ask a nearby member of hospital staff for help. No message has been sent to staff from this screen. You can also type your answers.'}</p><button className={buttonClass} onClick={() => setHelp(false)}><X size={20}/>{hi ? 'बंद करें' : 'Close'}</button></div>
+    </div>}
+  </main>;
 }

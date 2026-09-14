@@ -116,3 +116,6 @@ def migrate(db):
     if not db.execute('SELECT 1 FROM schema_migrations WHERE version=4').fetchone():
         _add_column(db, 'document_entities', "entity_metadata_json TEXT NOT NULL DEFAULT '{}'")
         db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(4,?)',(now(),))
+    if not db.execute('SELECT 1 FROM schema_migrations WHERE version=5').fetchone():
+        _add_column(db, 'encounters', 'pending_question_json TEXT')
+        db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(5,?)', (now(),))

@@ -166,6 +166,16 @@ def _duration(text: str) -> str | None:
 
 
 def _severity(text: str, direct_answer: bool = False) -> int | None:
+    # Normalize spoken numerals only inside explicit severity-scale wording.
+    normalized = text.casefold()
+    for word, value in {'zero':0,'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+                        'शून्य':0,'एक':1,'दो':2,'तीन':3,'चार':4,'पाँच':5,'पांच':5,'छह':6,'सात':7,'आठ':8,'नौ':9,'दस':10}.items():
+        normalized = re.sub(rf'(?<!\w){word}(?!\w)', str(value), normalized)
+    hindi = re.search(r'(?:दर्द|तीव्रता)\s*(\d{1,2})\s*(?:है[,।]?\s*)?10\s*(?:में से|मेसे)', normalized)
+    if hindi:
+        value = int(hindi.group(1))
+        return value if 0 <= value <= 10 else None
+    text = normalized
     match = re.search(r"\b(10|[0-9])\s*(?:/\s*10|out of 10)\b", text.casefold())
     if not match and direct_answer:
         match = re.fullmatch(r"\s*(10|[0-9])(?:\s*(?:please|thanks))?[.!]?\s*", text.casefold())
@@ -180,6 +190,9 @@ def extract_rule_based(statement: str, question_id: str, state: dict[str, Any]) 
     text = clean_text(statement)
     if not text:
         return []
+    fields = state.get('_question_fields', [question_id])
+    if len(fields) > 1:
+        return extract_grouped(text, fields, state)
     result: dict[str, Any] = {}
     # A later answer can contain another symptom (for example "no nausea").
     # It must never silently replace the already established chief complaint.
@@ -224,7 +237,10 @@ def extract_rule_based(statement: str, question_id: str, state: dict[str, Any]) 
         if not any(word in lowered for word in UNKNOWN_WORDS + DECLINED_WORDS):
             result[question_id] = text[:240]
     if question_id in LIST_FIELDS:
-        if re.fullmatch(r"(?:no|none|none known|no known allergies|no medications|no medicines|no allergies|no conditions|nothing|nil|कोई नहीं|नहीं)[.!]?", lowered):
+        affirmation = ' '.join(lowered.translate(str.maketrans('', '', '.,!?।')).split())
+        if any(word in lowered for word in UNKNOWN_WORDS + DECLINED_WORDS) or affirmation in {'yes', 'yes that is correct', 'correct', 'okay', 'हाँ', 'हां'}:
+            pass
+        elif re.fullmatch(r"(?:no|none|none known|no known allergies|no medications|no medicines|no allergies|no conditions|nothing|nil|कोई नहीं|नहीं)[.!]?", lowered):
             result[question_id] = []
         else:
             result[question_id] = [item.strip() for item in re.split(r"[,;]", text) if item.strip()]
@@ -239,6 +255,54 @@ def extract_rule_based(statement: str, question_id: str, state: dict[str, Any]) 
         {"field_name": field, "value": value, "evidence": text, "confidence": 0.88, "source": "AI_EXTRACTION"}
         for field, value in result.items()
     ]
+
+
+def extract_grouped(text: str, fields: list[str], state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Keep compound answers separate: never copy one response into every asked field."""
+    context = {k: v for k, v in state.items() if not k.startswith('_')}
+    result = {f['field_name']: f for f in extract_rule_based(text, '__group__', context)}
+    lowered = text.casefold()
+    def add(field, value, evidence=text):
+        result[field] = {'field_name': field, 'value': value, 'evidence': evidence, 'confidence': .88}
+    # An explicit 'none' to a list of symptoms/history has a well-defined scope.
+    if re.fullmatch(r'(?:no|none|none of (?:these|those)|no to all|nahi|nahin|नहीं|कोई नहीं)[.!।]?', lowered):
+        for field in fields:
+            if field in BOOL_FIELDS: add(field, False)
+            elif field in LIST_FIELDS: add(field, [])
+        return list(result.values())
+    patterns = {
+        'location': r'\b(?:central chest|middle of (?:my |the )?chest|left (?:side|chest|arm)|right (?:side|chest)|lower (?:right |left )?abdomen|forehead|temples)\b',
+        'character': r'\b(?:pressure|burning|sharp|dull|throbbing|stabbing|aching|tightness)\b',
+        'radiation': r'[^.;!?]*(?:spread|radiat|moves? to)[^.;!?]*',
+        'exertion': r'[^.;!?]*(?:worse|better|walking|rest relieves)[^.;!?]*',
+        'onset': r'\b(?:suddenly|gradually|sudden|gradual)\b',
+        'frequency': r'\b(?:\d+|once|twice|three|four|five)\s*(?:times?|episodes?)(?:\s+(?:a |per )?(?:day|hour))?\b',
+        'temperature': r'\b\d{2,3}(?:\.\d+)?\s*(?:degrees?\s*)?[cf]\b',
+    }
+    for field, pattern in patterns.items():
+        match = re.search(pattern, lowered)
+        if match and field in fields: add(field, match.group().strip())
+    for field in fields:
+        if field == 'sudden_onset' and re.search(r'\b(?:sudden|suddenly|gradual|gradually)\b', lowered):
+            add(field, bool(re.search(r'\b(?:sudden|suddenly)\b', lowered)) and not bool(re.search(r'not sudden', lowered)))
+    history_patterns = {
+        'past_medical_history': r'(?:no (?:long.term |medical |health )?conditions|no (?:past |medical )history|(?:i have |history of )(?:diabetes|hypertension|asthma|heart disease)[^.;]*)',
+        'medications': r'(?:no (?:regular )?(?:medicines|medications)|(?:i take |taking |medicines?: |medications?: )[^.;]+)',
+        'allergies': r'(?:no (?:known )?allergies|(?:allergic to |allergies: )[^.;]+)',
+    }
+    for field, pattern in history_patterns.items():
+        match = re.search(pattern, lowered)
+        if match and field in fields:
+            value = match.group().strip()
+            add(field, [] if value.startswith('no ') else [value], value)
+    for field, pattern in {
+        'past_medical_history': r'(?:कोई )?(?:पुरानी|पुराणी|पुराने) (?:बीमारी|बिमारी) नहीं',
+        'medications': r'(?:कोई )?दवा (?:नहीं (?:लेता|लेती|लेते)|नहीं)',
+        'allergies': r'(?:कोई )?(?:एलर्जी|अलर्जी|अलरजी) नहीं',
+    }.items():
+        match = re.search(pattern, lowered)
+        if field in fields and match: add(field, [], match.group())
+    return list(result.values())
 
 
 def required_fields(state: dict[str, Any], care_mode: str = 'MODERN') -> list[str]:

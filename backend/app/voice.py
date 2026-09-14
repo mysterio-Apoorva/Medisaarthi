@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import math
+import re
 import tempfile
 from pathlib import Path
 from threading import Lock
@@ -18,7 +20,7 @@ _ALLOWED_AUDIO = {
     "audio/wav": (".wav", b"RIFF"),
     "audio/mp4": (".m4a", b""),
 }
-_model = None
+_models = {}
 _model_lock = Lock()
 
 
@@ -26,27 +28,27 @@ class SpeechToTextUnavailable(RuntimeError):
     """Raised when the optional local Whisper runtime/model cannot be loaded."""
 
 
-def _get_model():
-    global _model
-    if _model is not None:
-        return _model
+def _get_model(language: str = 'en'):
+    name = os.getenv('STT_MODEL_HI', 'small') if language == 'hi' else os.getenv('STT_MODEL', 'base')
+    if name in _models:
+        return _models[name]
     with _model_lock:
-        if _model is not None:
-            return _model
+        if name in _models:
+            return _models[name]
         try:
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise SpeechToTextUnavailable("The local speech recognition runtime is not installed") from exc
         try:
-            _model = WhisperModel(
-                os.getenv("STT_MODEL", "base"),
+            _models[name] = WhisperModel(
+                name,
                 device=os.getenv("STT_DEVICE", "cpu"),
                 compute_type=os.getenv("STT_COMPUTE_TYPE", "int8"),
                 download_root=os.getenv("STT_MODEL_DIR", "backend/data/models"),
             )
         except Exception as exc:
             raise SpeechToTextUnavailable("The local speech model could not be loaded") from exc
-    return _model
+    return _models[name]
 
 
 async def transcribe_upload(upload: UploadFile, language: str) -> str:
@@ -85,13 +87,23 @@ def _transcribe_bytes(payload: bytes, suffix: str, language: str) -> str:
             samples = decode_audio(str(temp_path), sampling_rate=16000)
             if len(samples) > 16000 * 120:
                 raise HTTPException(status_code=413, detail="Please record at most two minutes at a time")
-            segments, _ = _get_model().transcribe(
+            segments, _ = _get_model(language).transcribe(
                 samples,
                 language="hi" if language == "hi" else "en",
                 vad_filter=True,
                 beam_size=5,
                 condition_on_previous_text=False,
+                # Script guidance contains no expected symptoms or answers.
+                initial_prompt='नमस्ते। यह हिंदी देवनागरी लिपि है।' if language == 'hi' else None,
             )
+            segments = list(segments)
+            min_logprob = float(os.getenv('STT_MIN_AVG_LOGPROB', '-1.0'))
+            max_no_speech = float(os.getenv('STT_MAX_NO_SPEECH_PROB', '0.6'))
+            # Reject the whole utterance if part is unintelligible; never silently omit
+            # a low-confidence negation, medicine or number and submit the remainder.
+            if any(not math.isfinite(s.avg_logprob) or s.avg_logprob < min_logprob
+                   or s.no_speech_prob > max_no_speech or s.compression_ratio > 2.4 for s in segments):
+                raise HTTPException(status_code=422, detail='Speech was unclear. Please say your answer again.')
             transcript = " ".join(segment.text.strip() for segment in segments).strip()
         except SpeechToTextUnavailable:
             raise
@@ -99,8 +111,10 @@ def _transcribe_bytes(payload: bytes, suffix: str, language: str) -> str:
             raise
         except Exception as exc:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="The recording could not be transcribed. Please speak clearly and try again.") from exc
-        if not transcript:
+        if not transcript or not re.search(r'[^\W_]', transcript, re.UNICODE):
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="No intelligible speech was found in the recording")
+        if language == 'hi' and re.search(r'[\u0600-\u06ff]', transcript):
+            raise HTTPException(422, 'The speech language was unclear. Please repeat your answer.')
         return transcript
     finally:
         if temp_path:

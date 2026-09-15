@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { DoctorSummaryResponse, DoctorSummaryEditRequest } from '@/types';
 import { updateDoctorSummary } from '@/services/api';
-import { Save, Edit3, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Save, Edit3, AlertCircle } from 'lucide-react';
 
 interface EditSummaryModalProps {
   isOpen: boolean;
@@ -28,7 +28,6 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
   const [severity, setSeverity] = useState(cc.severity || '');
   const [location, setLocation] = useState(cc.location || '');
   const [trigger, setTrigger] = useState(cc.trigger || '');
-  const [associatedSymptoms, setAssociatedSymptoms] = useState(cc.associated_symptoms || '');
 
   // Lists State
   const [pastHistory, setPastHistory] = useState(
@@ -44,65 +43,47 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      setChiefComplaint(cc.chief_complaint || '');
-      setDuration(cc.duration || '');
-      setSeverity(cc.severity || '');
-      setLocation(cc.location || '');
-      setTrigger(cc.trigger || '');
-      setAssociatedSymptoms(cc.associated_symptoms || '');
-      setPastHistory(
-        summary.past_medical_history?.map((h) => ({ condition: h.condition, date: h.date || '' })) || []
-      );
-      setMedications(
-        summary.medications?.map((m) => ({ name: m.name, dosage: m.dosage || '', frequency: m.frequency || '' })) || []
-      );
-      setAllergies(
-        summary.allergies?.map((a) => ({ allergen: a.allergen, reaction: a.reaction || '' })) || []
-      );
-      setErrorMessage(null);
-    }
-  }, [isOpen, summary]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setErrorMessage(null);
 
     const editPayload: DoctorSummaryEditRequest = {
-      chief_complaint: chiefComplaint.trim() || undefined,
-      duration: duration.trim() || undefined,
-      severity: severity.trim() || undefined,
-      location: location.trim() || undefined,
-      trigger: trigger.trim() || undefined,
-      associated_symptoms: associatedSymptoms.trim() || undefined,
-      past_medical_history: pastHistory.map((h) => ({
+      chief_complaint: chiefComplaint !== (cc.chief_complaint || '') ? chiefComplaint.trim() : undefined,
+      duration: duration !== (cc.duration || '') ? duration.trim() : undefined,
+      severity: severity !== (cc.severity || '') ? severity.trim() : undefined,
+      location: location !== (cc.location || '') ? location.trim() : undefined,
+      trigger: trigger !== (cc.trigger || '') ? trigger.trim() : undefined,
+      past_medical_history: pastHistory.map(h => h.condition).join('\n') === summary.past_medical_history.map(h => h.condition).join('\n') ? undefined : pastHistory.map((h) => ({
         condition: h.condition.trim(),
         date: h.date.trim() || undefined,
         source: 'doctor_verified',
       })),
-      medications: medications.map((m) => ({
+      medications: JSON.stringify(medications) === JSON.stringify(summary.medications.map(m => ({name:m.name,dosage:m.dosage || '',frequency:m.frequency || ''}))) ? undefined : medications.map((m) => ({
         name: m.name.trim(),
         dosage: m.dosage.trim(),
         frequency: m.frequency.trim() || undefined,
         source: 'doctor_verified',
       })),
-      allergies: allergies.map((a) => ({
+      allergies: JSON.stringify(allergies) === JSON.stringify(summary.allergies.map(a => ({allergen:a.allergen,reaction:a.reaction || ''}))) ? undefined : allergies.map((a) => ({
         allergen: a.allergen.trim(),
         reaction: a.reaction.trim() || undefined,
         source: 'doctor_verified',
       })),
     };
 
+    if (!Object.values(editPayload).some(value => value !== undefined)) {
+      setIsSaving(false); setErrorMessage('No changes to save.'); return;
+    }
+
     try {
       const res = await updateDoctorSummary(summary.patient_snapshot.patient_id, editPayload);
       setIsSaving(false);
       onSaveSuccess(res.updated_fields);
       onClose();
-    } catch (err: any) {
+    } catch (err) {
       setIsSaving(false);
-      setErrorMessage(err?.message || 'Failed to save doctor corrections. Please try again.');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to save doctor corrections. Please try again.');
     }
   };
 
@@ -167,11 +148,11 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Severity (e.g. 7, 8, 8/10)
+                Severity (0–10)
               </label>
               <input
                 id="edit-severity"
-                type="text"
+                type="number" min={0} max={10} step={1}
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
                 className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
@@ -212,16 +193,16 @@ export const EditSummaryModal: React.FC<EditSummaryModalProps> = ({
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                 Associated Symptoms
               </label>
-              <input
-                id="edit-associated-symptoms"
-                type="text"
-                value={associatedSymptoms}
-                onChange={(e) => setAssociatedSymptoms(e.target.value)}
-                placeholder="e.g. Sweating, breathlessness"
-                className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500"
-              />
+              <p className="text-sm">{cc.associated_symptoms || 'None recorded'}</p>
             </div>
           </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-xs">Historical records, not the new prescription. One item per line; an empty list records none.</p>
+          <label className="block text-sm">Past medical history<textarea className="block w-full border rounded-lg p-2" value={pastHistory.map(h => h.condition).join('\n')} onChange={e => setPastHistory(e.target.value.split('\n').map(condition => ({condition,date:''})))} /></label>
+          <label className="block text-sm">Reported medications<textarea className="block w-full border rounded-lg p-2" value={medications.map(m => [m.name,m.dosage,m.frequency].filter(Boolean).join(' — ')).join('\n')} onChange={e => setMedications(e.target.value.split('\n').map(name => ({name,dosage:'',frequency:''})))} /></label>
+          <label className="block text-sm">Reported allergies<textarea className="block w-full border rounded-lg p-2" value={allergies.map(a => [a.allergen,a.reaction].filter(Boolean).join(' — ')).join('\n')} onChange={e => setAllergies(e.target.value.split('\n').map(allergen => ({allergen,reaction:''})))} /></label>
         </div>
 
         {/* Action Buttons */}

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { HeartPulse, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { HeartPulse, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { PatientHeader } from '@/components/patient/PatientHeader';
 

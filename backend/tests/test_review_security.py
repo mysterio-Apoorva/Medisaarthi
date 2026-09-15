@@ -35,6 +35,8 @@ def test_review_consent_status_locks_and_fhir():
         assert bundle['resourceType']=='Bundle'
         encounter = next(e['resource'] for e in bundle['entry'] if e['resource']['resourceType']=='Encounter')
         assert encounter['status']=='in-progress' and '_' not in encounter['id']
+        _expect(client.post(f'/doctor/encounters/{identifier}/finalize'),409)
+        _expect(client.put(f'/records/{identifier}/prescription', json={'expected_revision':0,'medicines':[],'advice':'Synthetic review instructions','no_medicines_reason':'No medicine prescribed in this test'}),200)
         _expect(client.post(f'/doctor/encounters/{identifier}/finalize'),200)
         _expect(client.post('/doctor/patients/P1001/facts',json={'field_name':'severity','value':2}),409)
         _expect(client.post(f'/doctor/encounters/{identifier}/finalize'),409)

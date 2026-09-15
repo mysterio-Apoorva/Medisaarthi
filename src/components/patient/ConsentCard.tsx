@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ChevronDown, ChevronUp, Lock, UserCheck, AlertCircle, HeartHandshake } from 'lucide-react';
+import { ChevronDown, ChevronUp, Lock, UserCheck, AlertCircle, HeartHandshake } from 'lucide-react';
 
 interface ConsentCardProps {
   agreed: boolean;

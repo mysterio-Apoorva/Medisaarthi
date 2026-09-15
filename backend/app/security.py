@@ -7,7 +7,7 @@ import os
 import secrets
 import sqlite3
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, TypedDict
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
@@ -55,7 +55,7 @@ class PatientRegistration(BaseModel):
 
 
 def token_digest(token: str) -> str:
-    return hashlib.sha256(token.encode("ascii")).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_session(user_id: str) -> tuple[str, str]:
@@ -128,7 +128,15 @@ def assert_patient_access(db: sqlite3.Connection, user: AuthenticatedUser, patie
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to access this patient record")
 
 
-def cookie_kwargs(expires_at: str) -> dict[str, object]:
+class CookieOptions(TypedDict):
+    httponly: bool
+    secure: bool
+    samesite: Literal['lax', 'strict', 'none']
+    max_age: int
+    path: str
+
+
+def cookie_kwargs(expires_at: str) -> CookieOptions:
     return {
         "httponly": True,
         "secure": os.getenv("COOKIE_SECURE", "false").lower() == "true",

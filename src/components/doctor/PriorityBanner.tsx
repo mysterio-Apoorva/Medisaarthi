@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ShieldAlert } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface PriorityBannerProps {
   flags: string[];

@@ -1,5 +1,7 @@
 # MediKiosk engineering handoff
 
+Historical report. Current implementation and verification: [END_TO_END_AUDIT.md](END_TO_END_AUDIT.md) and [API_AUDIT.md](API_AUDIT.md).
+
 Verification date: 13 September 2026. This is a tested local demonstration build, not a production-readiness, clinical-validation, or live hospital-integration certification. The complete requested specification is not claimed finished; remaining boundaries are listed below.
 
 ## Existing work preserved

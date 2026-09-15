@@ -3,7 +3,7 @@ import { DashboardStats } from '@/types';
 import { Users, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface DashboardHeaderProps {
-  stats: DashboardStats;
+  stats: DashboardStats | null;
   onRefresh?: () => void;
   isLoading?: boolean;
 }
@@ -16,8 +16,8 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   const statCards = [
     {
       title: 'Patients Waiting',
-      value: stats.patientsWaiting,
-      desc: 'In OPD queue today',
+      value: stats?.patientsWaiting ?? '—',
+      desc: 'Assigned active encounters',
       icon: Users,
       color: 'sky',
       bg: 'bg-sky-50/80 border-sky-200 text-sky-700',
@@ -25,7 +25,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     },
     {
       title: 'Interviews Completed',
-      value: stats.interviewsCompleted,
+      value: stats?.interviewsCompleted ?? '—',
       desc: 'Pre-consultation ready',
       icon: CheckCircle2,
       color: 'emerald',
@@ -34,7 +34,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     },
     {
       title: 'Needs Review',
-      value: stats.needsReview,
+      value: stats?.needsReview ?? '—',
       desc: 'Pending doctor sign-off',
       icon: Clock,
       color: 'amber',
@@ -43,7 +43,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     },
     {
       title: 'Priority Reviews',
-      value: stats.priorityReviews,
+      value: stats?.priorityReviews ?? '—',
       desc: 'Requires early attention',
       icon: AlertTriangle,
       color: 'rose',

@@ -310,7 +310,8 @@ def required_fields(state: dict[str, Any], care_mode: str = 'MODERN') -> list[st
     ontology = runtime_ontology()
     recognized = complaint if complaint in ontology else None
     complaint_fields = ontology[recognized]["required"] if recognized else ("duration", "severity")
-    safety_order = {'chest pain':('breathlessness','severity'), 'headache':('sudden_onset','severity'), 'abdominal pain':('severity','vomiting')}.get(recognized, ())
+    safety_fields: dict[str, tuple[str, ...]] = {'chest pain':('breathlessness','severity'), 'headache':('sudden_onset','severity'), 'abdominal pain':('severity','vomiting')}
+    safety_order = safety_fields.get(recognized or '', ())
     return list(dict.fromkeys(("chief_complaint", *safety_order, *complaint_fields, *COMMON_FIELDS, *(AYUSH_FIELDS if care_mode == 'AYUSH' else ()))))
 
 

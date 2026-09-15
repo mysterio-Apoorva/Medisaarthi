@@ -3,17 +3,8 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { PatientListItem } from '@/types';
-import { Badge } from '@/components/ui/Badge';
-import {
-  Search,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  AlertTriangle,
-  FileQuestion,
-  User,
-  ShieldAlert,
-} from 'lucide-react';
+
+import { Search, CheckCircle2, ChevronRight, Clock, AlertTriangle, FileQuestion, ShieldAlert } from 'lucide-react';
 
 interface PatientListProps {
   patients: PatientListItem[];

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { AlertCircle, HelpCircle, FileSearch, ShieldAlert } from 'lucide-react';
+import { HelpCircle, FileSearch, ShieldAlert } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface ImportantInfoProps {

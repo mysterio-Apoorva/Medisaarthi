@@ -9,15 +9,14 @@ from backend.app.clinical_engine import next_question, detect_complaint, runtime
 from backend.tests.test_current_system import _new_encounter, _expect
 
 
-def test_failed_model_has_honest_deterministic_fallback(monkeypatch):
+def test_failed_model_never_substitutes_rules(monkeypatch):
     monkeypatch.setenv('AI_PROVIDER','ollama')
     monkeypatch.setenv('AI_FALLBACK_MODELS','')
     def unavailable(*args): raise RuntimeError('Deliberate outage test')
     monkeypatch.setattr(OllamaProvider,'extract',unavailable)
     manager=ProviderManager()
-    result,provider,warning=manager.extract('I have chest pain since yesterday','chief_complaint',{})
-    assert provider=='clinical_rules' and warning
-    assert any(f.field_name=='chief_complaint' and f.value=='chest pain' for f in result.facts)
+    with pytest.raises(RuntimeError, match='unavailable'):
+        manager.extract('I have chest pain since yesterday','chief_complaint',{})
     assert manager.snapshot()[0]['cooldown_seconds']>0
 
 

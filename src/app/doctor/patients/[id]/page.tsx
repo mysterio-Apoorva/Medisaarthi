@@ -1,21 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import {
-  DoctorSummaryResponse,
-  DoctorNarrativeResponse,
-  DoctorEditAuditItem,
-  BackendInterviewDetailResponse,
-} from '@/types';
-import {
-  getDoctorSummary,
-  getDoctorNarrative,
-  getDoctorAudit,
-  verifyDoctorSummary,
-  getInterviewDetail,
-} from '@/services/api';
+import { DoctorSummaryResponse, DoctorNarrativeResponse, DoctorEditAuditItem, BackendInterviewDetailResponse } from '@/types';
+import { getDoctorSummary, getDoctorNarrative, getDoctorAudit, verifyDoctorSummary, getInterviewDetail } from '@/services/api';
 import { PatientProfileHeader } from '@/components/doctor/PatientProfileHeader';
 import { NarrativeSummaryCard } from '@/components/doctor/NarrativeSummaryCard';
 import { StructuredClinicalData } from '@/components/doctor/StructuredClinicalData';
@@ -24,23 +12,14 @@ import { DoctorAuditTrail } from '@/components/doctor/DoctorAuditTrail';
 import { EditSummaryModal } from '@/components/doctor/EditSummaryModal';
 import { VerifyConfirmModal } from '@/components/doctor/VerifyConfirmModal';
 import { InterviewDrawer } from '@/components/doctor/InterviewDrawer';
-import {
-  CheckCircle2,
-  AlertCircle,
-  FileQuestion,
-  RefreshCw,
-  ShieldCheck,
-  ShieldAlert,
-} from 'lucide-react';
+import { CheckCircle2, AlertCircle, FileQuestion, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export default function DoctorPatientProfilePage({
   params,
 }: {
   params: Promise<{ id: string }>;
-}) {
-  const router = useRouter();
-  const resolvedParams = use(params);
+}) {  const resolvedParams = use(params);
   const patientId = resolvedParams.id;
 
   // Data State
@@ -60,13 +39,8 @@ export default function DoctorPatientProfilePage({
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'warning' } | null>(null);
 
   // Load all patient data from live backend
-  const loadAllData = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-
-    try {
-      // 1. Fetch structured summary
-      const sumData = await getDoctorSummary(patientId);
+  const loadAllData = useCallback(() => getDoctorSummary(patientId).then(async sumData => {
+      setErrorMessage(null);
       if (!sumData) {
         setIsLoading(false);
         return;
@@ -79,7 +53,7 @@ export default function DoctorPatientProfilePage({
         const narrData = await getDoctorNarrative(patientId);
         setNarrative(narrData);
       } catch {
-        // Narrative fallback
+        setErrorMessage('The narrative could not be loaded. Reload the record to retry.');
       } finally {
         setIsNarrativeLoading(false);
       }
@@ -88,28 +62,27 @@ export default function DoctorPatientProfilePage({
       try {
         const auditList = await getDoctorAudit(patientId);
         setAuditEntries(auditList);
-      } catch {}
+      } catch { setErrorMessage('The audit history could not be loaded. Reload to retry.'); }
 
       // 4. Fetch interview transcript if interview_id exists
       if (sumData.interview_metadata?.interview_id) {
         try {
           const detail = await getInterviewDetail(sumData.interview_metadata.interview_id);
           setInterviewDetail(detail);
-        } catch {}
+        } catch { setErrorMessage('The interview transcript could not be loaded. Reload to retry.'); }
       }
 
       setIsLoading(false);
-    } catch (err: any) {
+    }).catch(err => {
       setIsLoading(false);
       setErrorMessage(
-        err?.message || 'Unable to load clinical records from backend server. Please check backend connectivity.'
+        err instanceof Error ? err.message : 'Unable to load clinical records from backend server. Please check backend connectivity.'
       );
-    }
-  };
+    }), [patientId]);
 
   useEffect(() => {
     loadAllData();
-  }, [patientId]);
+  }, [loadAllData]);
 
   // Show Toast
   const triggerToast = (text: string, type: 'success' | 'info' | 'warning' = 'success') => {
@@ -140,9 +113,9 @@ export default function DoctorPatientProfilePage({
       triggerToast(`Intake summary officially verified by ${res.verified_by}.`, 'success');
       // Refresh all data
       await loadAllData();
-    } catch (err: any) {
+    } catch (err) {
       setIsVerifying(false);
-      triggerToast(err?.message || 'Verification failed. Please try again.', 'warning');
+      triggerToast(err instanceof Error ? err.message : 'Verification failed. Please try again.', 'warning');
     }
   };
 
@@ -226,19 +199,19 @@ export default function DoctorPatientProfilePage({
 
         {/* 3. Underlying Structured Clinical Facts Section */}
         <StructuredClinicalData summary={summary} />
-        <EncounterReviewPanel patientId={patientId} onChange={loadAllData} />
+        <EncounterReviewPanel patientId={patientId} recordRevision={summary.record_revision} onChange={loadAllData} />
 
         {/* 4. Doctor Edit History & Audit Trail */}
         <DoctorAuditTrail auditEntries={auditEntries} />
       </main>
 
       {/* Edit Summary Modal */}
-      <EditSummaryModal
+      {isEditModalOpen && <EditSummaryModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         summary={summary}
         onSaveSuccess={handleEditSuccess}
-      />
+      />}
 
       {/* Verification Confirmation Modal */}
       <VerifyConfirmModal
@@ -257,9 +230,7 @@ export default function DoctorPatientProfilePage({
         patient={{
           patient_id: summary.patient_snapshot.patient_id,
           name: summary.patient_snapshot.name,
-          age: summary.patient_snapshot.age ?? 0,
-          gender: (summary.patient_snapshot.gender as any) || 'Other',
-          language: (summary.patient_snapshot.preferred_language as any) || 'en',
+          language: summary.patient_snapshot.preferred_language,
         }}
         transcript={
           interviewDetail?.messages?.map((m) => ({

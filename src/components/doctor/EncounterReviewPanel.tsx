@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { API_BASE_URL } from '@/services/api';
 import { DocumentReview } from '@/components/patient/DocumentReview';
 import { KnowledgePanel } from '@/components/doctor/KnowledgePanel';
+import { ClinicalRecord } from '@/components/ClinicalRecord';
 
 type ReviewData = {
   encounter: { encounter_id: string; status: string; care_mode?: string } | null;
@@ -19,18 +20,18 @@ type ReviewData = {
   };
 };
 
-export function EncounterReviewPanel({ patientId, onChange }: { patientId: string; onChange: () => void }) {
+export function EncounterReviewPanel({ patientId, onChange, recordRevision }: { patientId: string; onChange: () => void; recordRevision?: number }) {
   const [data, setData] = useState<ReviewData | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [replacements, setReplacements] = useState<Record<string,string>>({});
   const [aiSummary, setAiSummary] = useState<{ method: string; provider: string; sections: { title: string; facts: { fact_id: string; field_name: string; value: unknown; source: string }[] }[] } | null>(null);
-  async function load() {
-    const response = await fetch(`${API_BASE_URL}/doctor/patients/${encodeURIComponent(patientId)}/summary`, { credentials:'include' });
+  const [summaryRevision, setSummaryRevision] = useState<number | undefined>();
+  const load = useCallback(() => fetch(`${API_BASE_URL}/doctor/patients/${encodeURIComponent(patientId)}/summary`, { credentials:'include' }).then(async response => {
     if (!response.ok) throw new Error('Unable to load the encounter review.');
     setData(await response.json());
-  }
-  useEffect(() => { load().catch(e => setError(e.message)); }, [patientId]);
+  }), [patientId]);
+  useEffect(() => { load().catch(e => setError(e.message)); }, [load, recordRevision]);
   async function decide(id: string, action: 'APPROVED' | 'REJECTED' | 'MERGED') {
     setBusy(true); setError('');
     try {
@@ -44,6 +45,7 @@ export function EncounterReviewPanel({ patientId, onChange }: { patientId: strin
     <KnowledgePanel />
     {error && <p role="alert" className="rounded-xl bg-rose-50 text-rose-800 p-4">{error} <button className="underline" onClick={() => load().catch(e => setError(e.message))}>Reload</button></p>}
     {data?.encounter && <>
+      <ClinicalRecord key={`${data.encounter.encounter_id}-${data.encounter.status}`} encounterId={data.encounter.encounter_id} clinician onChange={() => { load().catch(e => setError(e.message)); onChange(); }} />
       <a className="inline-block text-sm text-sky-700 underline" href={`${API_BASE_URL}/doctor/encounters/${data.encounter.encounter_id}/fhir`}>Download local FHIR R4 bundle</a>
       <div className="rounded-2xl border border-sky-200 bg-white p-5 space-y-3">
         <h2 className="text-lg font-bold">AI-organized clinical summary</h2>
@@ -55,11 +57,12 @@ export function EncounterReviewPanel({ patientId, onChange }: { patientId: strin
             const result = await response.json();
             if (!response.ok) throw new Error(result.detail || 'Summary generation failed');
             setAiSummary(result);
+            setSummaryRevision(recordRevision);
           } catch (e) { setError(e instanceof Error ? e.message : 'Summary unavailable'); } finally { setBusy(false); }
         }}>{busy ? 'Processing…' : 'Generate grounded AI summary'}</button>
-        {aiSummary && <div className="space-y-3" data-testid="grounded-ai-summary"><p className="text-xs text-slate-500">{aiSummary.method} · {aiSummary.provider}</p>{aiSummary.sections.map((section,index) => <div key={index}><h3 className="font-semibold">{section.title}</h3>{section.facts.map(fact => <p className="text-sm" key={fact.fact_id}>{fact.field_name.replaceAll('_',' ')}: {JSON.stringify(fact.value)} <span className="text-xs text-slate-500">({fact.source})</span></p>)}</div>)}</div>}
+        {aiSummary && summaryRevision === recordRevision && <div className="space-y-3" data-testid="grounded-ai-summary"><p className="text-xs text-slate-500">{aiSummary.method} · {aiSummary.provider}</p>{aiSummary.sections.map((section,index) => <div key={index}><h3 className="font-semibold">{section.title}</h3>{section.facts.map(fact => <p className="text-sm" key={fact.fact_id}>{fact.field_name.replaceAll('_',' ')}: {JSON.stringify(fact.value)} <span className="text-xs text-slate-500">({fact.source})</span></p>)}</div>)}</div>}
       </div>
-      <DocumentReview encounterId={data.encounter.encounter_id} />
+      <DocumentReview encounterId={data.encounter.encounter_id} recordRevision={recordRevision} onChange={() => { load().catch(e => setError(e.message)); onChange(); }} />
       {data.unified_summary && <section className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-5 space-y-4" data-testid="unified-clinical-record">
         <div>
           <h2 className="text-lg font-bold">Unified physician handoff</h2>

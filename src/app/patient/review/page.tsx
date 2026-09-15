@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { completeInterviewSession, correctPatientFact, getIntakeSnapshot, type IntakeSnapshot } from '@/services/api';
 import { PatientHeader } from '@/components/patient/PatientHeader';
 import { DocumentReview } from '@/components/patient/DocumentReview';
+import { ClinicalRecord } from '@/components/ClinicalRecord';
 
 export default function PatientReviewPage() {
   const router = useRouter();
@@ -12,17 +13,22 @@ export default function PatientReviewPage() {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const loadVersion = useRef<object>({});
   const dirty = snapshot ? Object.entries(snapshot.clinical_state).some(([field,value]) => edits[field] !== (Array.isArray(value) ? value.join('\n') : String(value))) : false;
-  async function load(savedField?: string) {
+  const load = useCallback((savedField?: string, preserveEdits = false) => {
+    const version = {};
+    loadVersion.current = version;
     const id = localStorage.getItem('medisaarthi_current_interview_id');
-    if (!id) { router.replace('/patient/identify'); return; }
-    const data = await getIntakeSnapshot(id);
+    if (!id) { router.replace('/patient/identify'); return Promise.resolve(); }
+    return getIntakeSnapshot(id).then(data => {
+    if (version !== loadVersion.current) return;
     if (['SUBMITTED','FINALIZED'].includes(data.status)) { router.replace('/patient/completed'); return; }
     setSnapshot(data);
     const values = Object.fromEntries(Object.entries(data.clinical_state).map(([field,value]) => [field, Array.isArray(value) ? value.join('\n') : String(value)]));
-    setEdits(current => savedField ? {...current, [savedField]:values[savedField]} : values);
-  }
-  useEffect(() => { load().catch(e => setError(e.message)); }, []);
+    setEdits(current => savedField ? {...current, [savedField]:values[savedField]} : preserveEdits ? {...values, ...current} : values);
+    });
+  }, [router]);
+  useEffect(() => { load().catch(e => setError(e.message)); return () => { loadVersion.current = {}; }; }, [load]);
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <PatientHeader currentStep={4} totalSteps={4} stepName="Review and consent" />
     <main className="mx-auto max-w-3xl px-4 py-8 space-y-5">
@@ -47,7 +53,8 @@ export default function PatientReviewPage() {
             }}>Save {field.replaceAll('_',' ')}</button>
           </div>)}
         </section>
-        <DocumentReview encounterId={snapshot.encounter_id} allowUpload />
+        <DocumentReview encounterId={snapshot.encounter_id} allowUpload onChange={() => { setConfirmed(false); load(undefined, true).catch(e => setError(e.message)); }} />
+        <ClinicalRecord encounterId={snapshot.encounter_id} onChange={() => { setConfirmed(false); load(undefined, true).catch(e => setError(e.message)); }} />
         {!snapshot.question_budget.complete && <button className="min-h-12 rounded-xl bg-teal-100 px-5 py-3 text-teal-950" onClick={() => router.push('/patient/interview')}>Return to the conversation</button>}
         {snapshot.completion.critical_missing.length > 0 && <div className="rounded-xl bg-amber-50 p-4">Not yet recorded: {snapshot.completion.critical_missing.join(', ')}. {snapshot.question_budget.complete ? 'Your clinician will review the missing information. You do not need another interview question.' : <button className="underline" onClick={() => router.push('/patient/interview')}>Continue interview</button>}</div>}
         <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 bg-white"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" /><span>I have reviewed this information and consent to sharing this record with my authorized clinician. Submission consent version 2026-09.</span></label>

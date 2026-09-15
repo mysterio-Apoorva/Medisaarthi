@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { DoctorEditAuditItem } from '@/types';
-import { History, ChevronDown, ChevronUp, UserCheck, Clock, ShieldCheck } from 'lucide-react';
+import { History, ChevronDown, ChevronUp, UserCheck, Clock } from 'lucide-react';
 
 interface DoctorAuditTrailProps {
   auditEntries: DoctorEditAuditItem[];

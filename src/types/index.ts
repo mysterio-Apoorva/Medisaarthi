@@ -196,6 +196,7 @@ export interface DoctorSnapshotData {
 }
 
 export interface DoctorSummaryResponse {
+  record_revision?: number;
   patient_snapshot: DoctorSnapshotData;
   current_complaint: {
     chief_complaint?: string;

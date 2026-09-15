@@ -50,7 +50,11 @@ def _record_state(db, encounter_id: str) -> dict[str, Any]:
 
 def _context(db, plan: dict[str, Any]) -> dict[str, Any]:
     encounter = dict(db.execute("SELECT * FROM encounters WHERE encounter_id=?", (plan["encounter_id"],)).fetchone())
-    return {"encounter": encounter, "state": _record_state(db, plan["encounter_id"]), "instructions": plan.get("instructions") or ""}
+    from backend.app.routes.records import prescription_record
+    prescription = prescription_record(db, plan['encounter_id'])
+    state = _record_state(db, plan['encounter_id'])
+    state['medications'] = [f"{m['name']} {m.get('strength') or ''}; {m['dose']}, {m['frequency']}, {m['duration']}, {m['route']}; {m.get('instructions') or ''}" for m in prescription['medicines']] if prescription else []
+    return {"encounter": encounter, "state": state, "instructions": prescription['advice'] if prescription else plan.get("instructions") or ""}
 
 
 def _questions(context: dict[str, Any]) -> list[dict[str, str]]:
@@ -75,7 +79,39 @@ def _responses(db, session_id: str) -> list[dict[str, Any]]:
 
 def _next_question(db, session: dict[str, Any], plan: dict[str, Any]) -> dict[str, str] | None:
     answered = {response["question_id"] for response in _responses(db, session["follow_up_session_id"])}
-    return next((question for question in _questions(_context(db, plan)) if question["id"] not in answered), None)
+    context = _context(db, plan)
+    question = next((question for question in _questions(context) if question['id'] not in answered), None)
+    if question is None:
+        return None
+    cached = db.execute('SELECT question_json FROM follow_up_questions WHERE session_id=? AND question_id=?', (session['follow_up_session_id'], question['id'])).fetchone()
+    if cached:
+        return json.loads(cached['question_json'])
+    return question
+
+
+def _deliver_follow_up(result):
+    question = result['next_question']
+    if not question or question.get('generation_method'):
+        return result
+    from backend.app.ai.questions import phrase_question
+    with store.connection() as db:
+        context = _context(db, result['plan'])
+    try:
+        generated = phrase_question(question, {**context['state'], 'doctor_instructions': context['instructions'], 'responses': result['responses']}, context['encounter']['language'], context['encounter'].get('processing_mode') == 'MANUAL')
+    except HTTPException as exc:
+        result['next_question'] = {**question, 'text': '', 'generation_method': 'UNAVAILABLE'}
+        result['ai_warning'] = str(exc.detail)
+        return result
+    session = result['session']
+    with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        current = db.execute('SELECT revision FROM follow_up_sessions WHERE follow_up_session_id=?', (session['follow_up_session_id'],)).fetchone()
+        if current['revision'] != session['revision']:
+            raise HTTPException(409, 'The follow-up changed. Reload the saved responses.')
+        db.execute('INSERT OR IGNORE INTO follow_up_questions VALUES(?,?,?)', (session['follow_up_session_id'], question['id'], json.dumps(generated, ensure_ascii=False)))
+        generated = json.loads(db.execute('SELECT question_json FROM follow_up_questions WHERE session_id=? AND question_id=?', (session['follow_up_session_id'], question['id'])).fetchone()[0])
+    result['next_question'] = generated
+    return result
 
 
 def _follow_up_flags(message: str, state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -101,7 +137,7 @@ def _session_payload(db, plan: dict[str, Any], session: dict[str, Any]) -> dict[
     return {
         "plan": {key: plan[key] for key in ("follow_up_plan_id", "patient_id", "encounter_id", "instructions", "follow_up_at", "status", "created_at")},
         "session": session,
-        "record_context": {"chief_complaint": context["state"].get("chief_complaint"), "medications": context["state"].get("medications", []), "allergies": context["state"].get("allergies", []), "doctor_instructions": context["instructions"]},
+        "record_context": {"language": context['encounter']['language'], "chief_complaint": context["state"].get("chief_complaint"), "medications": context["state"].get("medications", []), "allergies": context["state"].get("allergies", []), "doctor_instructions": context["instructions"]},
         "responses": _responses(db, session["follow_up_session_id"]),
         "next_question": _next_question(db, session, plan),
         "alerts": alerts,
@@ -113,7 +149,7 @@ def create_follow_up_plan(db, *, patient_id: str, encounter_id: str, created_by:
     existing = db.execute("SELECT * FROM follow_up_plans WHERE encounter_id=?", (encounter_id,)).fetchone()
     if existing:
         return dict(existing)
-    plan = {
+    plan: dict[str, Any] = {
         "follow_up_plan_id": f"FUP_{uuid4().hex}",
         "patient_id": patient_id,
         "encounter_id": encounter_id,
@@ -168,6 +204,7 @@ def patient_follow_up(patient_id: str, user: AuthenticatedUser = Depends(current
 @router.post("/plans/{plan_id}/sessions", status_code=status.HTTP_201_CREATED)
 def start_session(plan_id: str, user: AuthenticatedUser = Depends(current_user)):
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         row = db.execute("SELECT * FROM follow_up_plans WHERE follow_up_plan_id=?", (plan_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Follow-up plan not found")
@@ -179,7 +216,8 @@ def start_session(plan_id: str, user: AuthenticatedUser = Depends(current_user))
         if active:
             response = _session_payload(db, plan, dict(active))
             response["resumed"] = True
-            return response
+            db.commit()
+            return _deliver_follow_up(response)
         session = {"follow_up_session_id": f"FUS_{uuid4().hex}", "follow_up_plan_id": plan_id, "patient_id": plan["patient_id"], "status": "ACTIVE", "revision": 0, "risk_level": "LOW", "started_at": now(), "completed_at": None}
         db.execute(
             """INSERT INTO follow_up_sessions(follow_up_session_id,follow_up_plan_id,patient_id,status,revision,risk_level,started_at,completed_at)
@@ -187,12 +225,14 @@ def start_session(plan_id: str, user: AuthenticatedUser = Depends(current_user))
             session,
         )
         store.audit(db, user.user_id, "FOLLOW_UP_STARTED", "FOLLOW_UP_SESSION", session["follow_up_session_id"])
-        return _session_payload(db, plan, session)
+        response = _session_payload(db, plan, session)
+    return _deliver_follow_up(response)
 
 
 @router.post("/sessions/{session_id}/answers")
 def answer(session_id: str, payload: FollowUpAnswerInput, user: AuthenticatedUser = Depends(current_user)):
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         row = db.execute("SELECT * FROM follow_up_sessions WHERE follow_up_session_id=?", (session_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Follow-up session not found")
@@ -207,6 +247,8 @@ def answer(session_id: str, payload: FollowUpAnswerInput, user: AuthenticatedUse
         if not question or question["id"] != payload.question_id:
             raise HTTPException(status_code=409, detail="The response does not match the current follow-up question")
         message = payload.message.strip()
+        if not message:
+            raise HTTPException(422, 'Enter a follow-up response before saving')
         db.execute(
             """INSERT INTO follow_up_responses(follow_up_response_id,follow_up_session_id,question_id,question_text,response_text,source,created_at)
                VALUES(?,?,?,?,?,?,?)""",
@@ -237,7 +279,8 @@ def answer(session_id: str, payload: FollowUpAnswerInput, user: AuthenticatedUse
             db.execute("UPDATE follow_up_sessions SET status='COMPLETED',completed_at=? WHERE follow_up_session_id=?", (now(), session_id))
             refreshed = dict(db.execute("SELECT * FROM follow_up_sessions WHERE follow_up_session_id=?", (session_id,)).fetchone())
         store.audit(db, user.user_id, "FOLLOW_UP_RESPONSE_RECORDED", "FOLLOW_UP_SESSION", session_id, {"question_id": question["id"], "risk_level": highest})
-        return _session_payload(db, plan, refreshed)
+        response = _session_payload(db, plan, refreshed)
+    return _deliver_follow_up(response)
 
 
 @router.post("/sessions/{session_id}/transcribe")

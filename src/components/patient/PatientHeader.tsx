@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { ShieldCheck, Stethoscope } from 'lucide-react';
+import { Stethoscope } from 'lucide-react';
 import { MediKioskLogo } from '@/components/brand/MediKioskLogo';
 
 interface PatientHeaderProps {

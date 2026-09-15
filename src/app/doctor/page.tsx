@@ -6,47 +6,27 @@ import { PatientListItem, DashboardStats } from '@/types';
 import { getDoctorPatients, getDashboardStats } from '@/services/api';
 import { DashboardHeader } from '@/components/doctor/DashboardHeader';
 import { PatientList } from '@/components/doctor/PatientList';
-import {
-  HeartPulse,
-  Menu,
-  X,
-  Stethoscope,
-  UserCheck,
-  Sparkles,
-  RefreshCw,
-  AlertCircle,
-} from 'lucide-react';
+import { HeartPulse, Menu, X, Stethoscope, UserCheck, RefreshCw, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export default function DoctorDashboardPage() {
   const [patients, setPatients] = useState<PatientListItem[]>([]);
-  const [stats, setStats] = useState<DashboardStats>({
-    patientsWaiting: 0,
-    interviewsCompleted: 0,
-    needsReview: 0,
-    priorityReviews: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const loadData = async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    try {
-      const pList = await getDoctorPatients();
+  const loadData = () => Promise.all([getDoctorPatients(), getDashboardStats()]).then(([pList, currentStats]) => {
+      setErrorMessage(null);
       setPatients(pList);
-
-      const currentStats = await getDashboardStats();
       setStats(currentStats);
       setIsLoading(false);
-    } catch (err: any) {
+    }).catch(err => {
       setIsLoading(false);
       setErrorMessage(
-        err?.message || 'Unable to connect to the Medisaarthi backend server. Please verify the backend is running.'
+        err instanceof Error ? err.message : 'Unable to connect to the Medisaarthi backend server. Please verify the backend is running.'
       );
-    }
-  };
+    });
 
   useEffect(() => {
     loadData();
@@ -129,7 +109,7 @@ export default function DoctorDashboardPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
               <Stethoscope className="w-4 h-4 text-sky-600" />
-              <span>Today's Pre-Consultation Patient Queue</span>
+              <span>Pre-Consultation Patient Queue</span>
             </h2>
             <span className="text-xs text-slate-500 font-medium">
               Live records from the secured local clinical store

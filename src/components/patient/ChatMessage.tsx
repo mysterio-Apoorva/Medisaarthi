@@ -1,7 +1,6 @@
 import React from 'react';
 import { InterviewMessage } from '@/types';
 import { Bot, User, Sparkles } from 'lucide-react';
-import { Badge } from '@/components/ui/Badge';
 
 interface ChatMessageProps {
   message: InterviewMessage;

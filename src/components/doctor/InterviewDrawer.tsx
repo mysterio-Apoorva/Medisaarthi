@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/Badge';
 interface InterviewDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  patient: Patient;
+  patient: Pick<Patient, 'patient_id' | 'name'> & {language?: string};
   transcript: InterviewMessage[];
 }
 

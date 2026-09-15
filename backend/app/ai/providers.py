@@ -13,10 +13,12 @@ import re
 from threading import Lock
 from urllib.parse import urlparse
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel, Field, ValidationError
+
+ModelT = TypeVar('ModelT', bound=BaseModel)
 
 from backend.app.clinical_engine import BOOL_FIELDS, LIST_FIELDS, extract_rule_based, _severity, UNKNOWN_WORDS, DECLINED_WORDS
 
@@ -39,7 +41,7 @@ class AIProvider(ABC):
     def generate(self, prompt: str) -> str:
         raise NotImplementedError
 
-    def structured_output(self, prompt: str, schema: type[BaseModel]) -> BaseModel:
+    def structured_output(self, prompt: str, schema: type[ModelT]) -> ModelT:
         return schema.model_validate_json(self.generate(prompt))
 
     def tool_call(self, prompt: str, tools: list[dict[str, Any]]) -> dict[str, Any]:
@@ -119,8 +121,8 @@ class OllamaProvider(AIProvider):
     name = "ollama"
 
     def __init__(self, base_url: str | None = None, model: str | None = None, timeout: float = 20) -> None:
-        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")).rstrip("/")
-        self.model = model or os.getenv("AI_MODEL", "qwen2.5:3b-instruct")
+        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or "http://127.0.0.1:11434").rstrip("/")
+        self.model = model or os.getenv("AI_MODEL") or "qwen2.5:3b-instruct"
         self.timeout = timeout
 
     def _assert_private_destination(self):
@@ -140,7 +142,7 @@ class OllamaProvider(AIProvider):
             raise RuntimeError("Ollama returned no structured content")
         return content
 
-    def structured_output(self, prompt: str, schema: type[BaseModel]) -> BaseModel:
+    def structured_output(self, prompt: str, schema: type[ModelT]) -> ModelT:
         self._assert_private_destination()
         response = httpx.post(f'{self.base_url}/api/generate', json={'model':self.model, 'prompt':prompt, 'stream':False, 'format':schema.model_json_schema(), 'options':{'temperature':0}}, timeout=self.timeout)
         response.raise_for_status()
@@ -178,9 +180,12 @@ class RuleBasedProvider(AIProvider):
 
 
 def configured_provider() -> AIProvider:
-    if os.getenv("AI_PROVIDER", "ollama").casefold() == "ollama":
+    mode = os.getenv("AI_PROVIDER", "ollama").casefold()
+    if mode == "ollama":
         return OllamaProvider()
-    return RuleBasedProvider()
+    if mode == 'clinical_rules':
+        return RuleBasedProvider()
+    raise RuntimeError('Unsupported AI_PROVIDER configuration')
 
 
 class ProviderManager:
@@ -197,6 +202,8 @@ class ProviderManager:
         primary = configured_provider()
         if isinstance(primary,RuleBasedProvider):
             return primary.extract(statement,question_id,state), primary.name, None
+        if not isinstance(primary, OllamaProvider):
+            raise RuntimeError('The configured provider does not support model extraction')
         candidates=[primary]+[OllamaProvider(model=name.strip()) for name in os.getenv('AI_FALLBACK_MODELS','').split(',') if name.strip() and name.strip()!=primary.model]
         for provider in candidates:
             key=provider.model
@@ -214,8 +221,7 @@ class ProviderManager:
                 with self.lock:
                     failures=status['failures']+1
                     self.health[key]={'health':'cooldown','failures':failures,'until':time.monotonic()+min(300,5*2**min(failures,6)),'latency_ms':int((time.monotonic()-started)*1000),'last_failure':type(exc).__name__,'quota_status':'rate_limited' if isinstance(exc,httpx.HTTPStatusError) and exc.response.status_code==429 else 'not_reported'}
-        fallback=RuleBasedProvider()
-        return fallback.extract(statement,question_id,state),fallback.name,'AI unavailable; the structured clinical workflow is continuing with local rules.'
+        raise RuntimeError('AI extraction is unavailable. Retry or explicitly select manual intake.')
 
 
 provider_manager=ProviderManager()

@@ -6,6 +6,7 @@ import { Patient, Language } from '@/types';
 import { getPatient, getIntakeSnapshot, uploadEncounterDocument } from '@/services/api';
 import { useRouter } from 'next/navigation';
 import { PatientHeader } from '@/components/patient/PatientHeader';
+import { ClinicalRecord } from '@/components/ClinicalRecord';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
@@ -40,7 +41,7 @@ export default function PatientCompletedPage() {
         if (!storedEncounter) { router.replace('/patient/identify'); return; }
         const snapshot = await getIntakeSnapshot(storedEncounter);
         if (!['SUBMITTED','FINALIZED'].includes(snapshot.status)) { router.replace('/patient/review'); return; }
-      } catch {}
+      } catch (error) { throw error; }
 
       setLanguage(currentLang);
       if (!currentId) return;
@@ -49,7 +50,7 @@ export default function PatientCompletedPage() {
     };
 
     load().catch(e => setLoadError(e instanceof Error ? e.message : 'Could not confirm your submission.'));
-  }, []);
+  }, [router]);
 
   const isHindi = language === 'hi';
 
@@ -77,6 +78,7 @@ export default function PatientCompletedPage() {
       <PatientHeader showDoctorPortalLink={false} />
 
       <main className="flex-1 max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col justify-center space-y-6 w-full text-center">
+        {encounterId && <ClinicalRecord encounterId={encounterId} readOnly />}
         {/* Large Success Icon */}
         <div className="relative mx-auto">
           <div className="w-24 h-24 rounded-3xl bg-emerald-600 text-white flex items-center justify-center shadow-xl shadow-emerald-600/25 ring-8 ring-emerald-100">

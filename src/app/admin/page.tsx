@@ -28,12 +28,11 @@ export default function AdminPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = async () => {
-    const current = await getCurrentUser();
+  const reload = () => getCurrentUser().then(async current => {
     if (current.role !== 'ADMIN') throw new Error('Administrator access is required.');
     const [userRows, auditRows, ontologyState] = await Promise.all([getAdminUsers(), getAdminAudits(), getAdminOntology()]);
     setUsers(userRows); setAudit(auditRows); setOntology(ontologyState);
-  };
+  });
 
   useEffect(() => { reload().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Could not load administration data.')); }, []);
 

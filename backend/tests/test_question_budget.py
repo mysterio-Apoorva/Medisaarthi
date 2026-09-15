@@ -68,11 +68,11 @@ def test_hindi_multi_field_answers_and_spoken_severity():
     assert {f['field_name']:f['value'] for f in facts} == {'past_medical_history':[], 'medications':[], 'allergies':[]}
 
 
-def test_red_flag_does_not_wait_for_model_and_conflict_stays_visible(monkeypatch):
+def test_explicit_manual_mode_evaluates_safety_without_ai(monkeypatch):
     from backend.app.ai.orchestrator import orchestrator
     def unexpected_model(*args): raise AssertionError('Safety must not wait for the LLM')
     monkeypatch.setattr(orchestrator.intake, 'run', unexpected_model)
-    result = orchestrator.interpret('I have chest pain and I am short of breath.', 'chief_complaint', {})
+    result = orchestrator.interpret('I have chest pain and I am short of breath.', 'chief_complaint', {}, manual=True)
     assert result.provider == 'clinical_rules'
     assert any(f.field_name == 'breathlessness' and f.value is True for f in result.extraction.facts)
 

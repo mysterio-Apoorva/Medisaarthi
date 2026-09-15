@@ -1,7 +1,7 @@
 import React from 'react';
 import { MedicalCondition } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { FileHeart, Calendar, CheckCircle2 } from 'lucide-react';
+import { FileHeart } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface PastMedicalHistoryProps {

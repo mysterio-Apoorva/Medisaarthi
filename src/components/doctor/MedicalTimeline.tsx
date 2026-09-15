@@ -1,7 +1,7 @@
 import React from 'react';
 import { TimelineEvent } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { History, Calendar, Database, CheckCircle, ShieldCheck } from 'lucide-react';
+import { History, Calendar, Database, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface MedicalTimelineProps {

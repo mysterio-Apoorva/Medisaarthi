@@ -116,7 +116,8 @@ def _extract_pdf_pages(path: Path) -> list[PageResult]:
         if len(document) > 20 or document.needs_pass:
             raise RuntimeError("DOCUMENT_REQUIRES_MANUAL_REVIEW")
         pages: list[PageResult] = []
-        for index, page in enumerate(document, start=1):
+        for index in range(1, len(document) + 1):
+            page = document.load_page(index - 1)
             text = page.get_text("text").strip()
             if text:
                 pages.append(PageResult(index, text, "PDF_TEXT", 0.98))
@@ -204,14 +205,14 @@ PROCEDURE_PATTERN = re.compile(r"(?im)^\s*(?:procedure|operation|surgery|operati
 PATIENT_PATTERN = re.compile(r"(?im)^\s*(?:patient(?:\s+name)?|name)\s*[:\-]\s*([A-Za-z][A-Za-z .'-]{1,120})$")
 PROVIDER_PATTERN = re.compile(r"(?im)^\s*(?:hospital|clinic|provider|hospital name)\s*[:\-]\s*([A-Za-z][A-Za-z0-9 .&()'-]{1,160})$")
 VITAL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("Blood pressure", re.compile(r"\b(?:bp|blood pressure)\s*[:\-]?\s*(\d{2,3}\s*/\s*\d{2,3})\s*(?:mmhg)?\b", re.I)),
-    ("Pulse", re.compile(r"\b(?:pulse|heart rate|hr)\s*[:\-]?\s*(\d{2,3})\s*(?:bpm|/min)?\b", re.I)),
-    ("Temperature", re.compile(r"\b(?:temp(?:erature)?)\s*[:\-]?\s*(\d{2,3}(?:\.\d+)?)\s*(?:°?\s*[CF])?\b", re.I)),
-    ("SpO2", re.compile(r"\b(?:spo2|o2\s*sat(?:uration)?)\s*[:\-]?\s*(\d{2,3})\s*%?\b", re.I)),
-    ("Weight", re.compile(r"\bweight\s*[:\-]?\s*(\d{1,3}(?:\.\d+)?)\s*kg\b", re.I)),
-    ("Height", re.compile(r"\bheight\s*[:\-]?\s*(\d{2,3}(?:\.\d+)?)\s*(?:cm|m)\b", re.I)),
+    ("Blood pressure", re.compile(r"\b(?:bp|blood pressure)\s*[:\-]?\s*(\d{2,3}\s*/\s*\d{2,3})[ \t]*(?P<unit>mmhg)?\b", re.I)),
+    ("Pulse", re.compile(r"\b(?:pulse|heart rate|hr)\s*[:\-]?\s*(\d{2,3})[ \t]*(?P<unit>bpm|/min)?\b", re.I)),
+    ("Temperature", re.compile(r"\b(?:temp(?:erature)?)\s*[:\-]?\s*(\d{2,3}(?:\.\d+)?)[ \t]*(?P<unit>°?[ \t]*[CF])?\b", re.I)),
+    ("SpO2", re.compile(r"\b(?:spo2|o2\s*sat(?:uration)?)\s*[:\-]?\s*(\d{2,3})\b[ \t]*(?P<unit>%)?", re.I)),
+    ("Weight", re.compile(r"\bweight\s*[:\-]?\s*(\d{1,3}(?:\.\d+)?)\s*(?P<unit>kg)\b", re.I)),
+    ("Height", re.compile(r"\bheight\s*[:\-]?\s*(\d{1,3}(?:\.\d+)?)\s*(?P<unit>cm|m)\b", re.I)),
 )
-LAB_PATTERN = re.compile(r"(?im)^\s*((?:ha?emoglobin|hb|wbc|rbc|platelet(?:s)?|blood\s*glucose|glucose|hba1c|creatinine|urea|sodium|potassium|cholesterol|triglyceride|tsh|bilirubin|alt|ast))\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*([A-Za-z%/^0-9.]+)?(?:\s*(?:\(|\[)?(?:reference\s*range|normal)\s*[:\-]?\s*([0-9.]+)\s*(?:-|to)\s*([0-9.]+)\s*[\)\]])?\s*$")
+LAB_PATTERN = re.compile(r"(?im)^[ \t]*((?:ha?emoglobin|hb|wbc|rbc|platelet(?:s)?|blood[ \t]*glucose|glucose|hba1c|creatinine|urea|sodium|potassium|cholesterol|triglyceride|tsh|bilirubin|alt|ast))[ \t]*[:\-]?[ \t]*(\d+(?:\.\d+)?)[ \t]*([A-Za-z%/^0-9.]+)?(?:[ \t]*(?:\(|\[)?[ \t]*(?:(?:reference[ \t]*range|normal)[ \t]*[:\-]?[ \t]*)?([0-9.]+)[ \t]*(?:-|–|to)[ \t]*([0-9.]+)[ \t]*[\)\]]?)?[ \t]*$")
 
 
 def _abnormal(value: str, lower: str | None, upper: str | None) -> str | None:
@@ -247,7 +248,8 @@ def _entities_from_page(page: PageResult) -> list[dict]:
             entities.append(_entity(entity_type, page, match.group(1).strip(), match.group(0), confidence=max(0.6, page.confidence * 0.8)))
     for label, pattern in VITAL_PATTERNS:
         for match in pattern.finditer(text):
-            entities.append(_entity("VITAL", page, f"{label}: {match.group(1).replace(' ', '')}", match.group(0), "document_vitals"))
+            unit = (match.groupdict().get('unit') or '').strip()
+            entities.append(_entity("VITAL", page, f"{label}: {match.group(1).replace(' ', '')}" + (f' {unit}' if unit else ''), match.group(0), "document_vitals"))
     for match in LAB_PATTERN.finditer(text):
         test, value, unit, low, high = match.groups()
         abnormal = _abnormal(value, low, high)

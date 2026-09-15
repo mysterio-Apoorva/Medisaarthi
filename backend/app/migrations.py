@@ -119,3 +119,50 @@ def migrate(db):
     if not db.execute('SELECT 1 FROM schema_migrations WHERE version=5').fetchone():
         _add_column(db, 'encounters', 'pending_question_json TEXT')
         db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(5,?)', (now(),))
+    if not db.execute('SELECT 1 FROM schema_migrations WHERE version=6').fetchone():
+        db.executescript('''
+            CREATE TABLE observations (
+                observation_id TEXT PRIMARY KEY,
+                encounter_id TEXT NOT NULL REFERENCES encounters(encounter_id),
+                kind TEXT NOT NULL CHECK(kind IN ('VITAL','TEST')),
+                name TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL,
+                measured_at TEXT NOT NULL, source TEXT NOT NULL,
+                recorded_by TEXT NOT NULL REFERENCES users(user_id),
+                created_at TEXT NOT NULL, voided_at TEXT,
+                void_reason TEXT, request_id TEXT NOT NULL,
+                UNIQUE(encounter_id, request_id)
+            );
+            CREATE INDEX ix_observations_encounter ON observations(encounter_id);
+            CREATE TABLE prescriptions (
+                encounter_id TEXT PRIMARY KEY REFERENCES encounters(encounter_id),
+                revision INTEGER NOT NULL CHECK(revision > 0),
+                medicines_json TEXT NOT NULL, advice TEXT NOT NULL,
+                no_medicines_reason TEXT, follow_up_at TEXT,
+                doctor_user_id TEXT NOT NULL REFERENCES users(user_id),
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE finalized_records (
+                encounter_id TEXT PRIMARY KEY REFERENCES encounters(encounter_id),
+                snapshot_json TEXT NOT NULL,
+                finalized_by TEXT NOT NULL REFERENCES users(user_id),
+                finalized_at TEXT NOT NULL
+            );
+            CREATE TRIGGER finalized_record_immutable BEFORE UPDATE ON finalized_records
+            BEGIN SELECT RAISE(ABORT, 'Finalized records are immutable'); END;
+        ''')
+        db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(6,?)', (now(),))
+    if not db.execute('SELECT 1 FROM schema_migrations WHERE version=7').fetchone():
+        _add_column(db, 'encounters', "processing_mode TEXT NOT NULL DEFAULT 'AI'")
+        db.execute('CREATE TABLE follow_up_questions(session_id TEXT NOT NULL REFERENCES follow_up_sessions(follow_up_session_id) ON DELETE CASCADE, question_id TEXT NOT NULL, question_json TEXT NOT NULL, PRIMARY KEY(session_id,question_id))')
+        db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(7,?)', (now(),))
+    if not db.execute('SELECT 1 FROM schema_migrations WHERE version=8').fetchone():
+        _add_column(db, 'documents', 'content_hash TEXT')
+        db.execute('CREATE UNIQUE INDEX ix_document_content ON documents(encounter_id,content_hash) WHERE content_hash IS NOT NULL')
+        db.executescript('''CREATE TRIGGER interview_question_limit BEFORE INSERT ON answers
+            WHEN (SELECT COUNT(*) FROM answers WHERE encounter_id=NEW.encounter_id) >= 10
+            BEGIN SELECT RAISE(ABORT, 'Interview question limit reached'); END;''')
+        db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(8,?)', (now(),))
+    if not db.execute('SELECT 1 FROM schema_migrations WHERE version=9').fetchone():
+        _add_column(db, 'prescriptions', 'allergy_review_json TEXT')
+        _add_column(db, 'observations', "metadata_json TEXT NOT NULL DEFAULT '{}'")
+        db.execute('INSERT INTO schema_migrations(version,applied_at) VALUES(9,?)', (now(),))

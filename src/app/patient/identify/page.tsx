@@ -12,8 +12,8 @@ type Mode = 'signin' | 'register';
 export default function PatientIdentifyPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('signin');
-  const [email, setEmail] = useState('patient.demo@medikiosk.local');
-  const [password, setPassword] = useState('DemoPass!2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>('Other');
@@ -67,7 +67,7 @@ export default function PatientIdentifyPage() {
             {error && <p role="alert" className="flex gap-2 text-sm text-rose-700"><AlertCircle className="w-4 h-4 shrink-0" />{error}</p>}
             <Button type="submit" variant="primary" size="xl" isLoading={busy} className="w-full" rightIcon={<ArrowRight className="w-5 h-5" />}>{mode === 'signin' ? 'Securely continue' : 'Create account and continue'}</Button>
           </form>
-          {mode === 'signin' && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950"><strong>Synthetic demo only:</strong> the prefilled account is seeded in the local database and uses a real server-side session. Change <code>DEMO_PASSWORD</code> before sharing the demo.</p>}
+
         </section>
       </main>
       <footer className="border-t border-slate-200 py-4 text-center text-xs text-slate-500 flex justify-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-600" /> Credentials are never stored in browser local storage.</footer>

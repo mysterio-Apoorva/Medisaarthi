@@ -16,18 +16,6 @@ const eslintConfig = defineConfig([
     "backend/data/**",
     ".pytest_cache/**",
   ]),
-  // The preserved UI predates React Compiler's new migration diagnostics.
-  // Keep these visible during incremental cleanup without turning a verified
-  // production build into a false negative solely for legacy presentation code.
-  {
-    files: ['src/**/*.{ts,tsx}'],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/purity": "warn",
-      "react/no-unescaped-entities": "warn",
-    },
-  },
 ]);
 
 export default eslintConfig;

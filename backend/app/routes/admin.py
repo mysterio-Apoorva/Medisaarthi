@@ -17,7 +17,7 @@ router = APIRouter(prefix="/admin", tags=["Administration"])
 def providers(user: AuthenticatedUser=Depends(require_roles('ADMIN'))):
     import os
     from backend.app.ai.providers import provider_manager
-    return {'configured_provider':os.getenv('AI_PROVIDER','ollama'),'configured_model':os.getenv('AI_MODEL','qwen2.5:3b-instruct'),'providers':provider_manager.snapshot(),'external_ai_enabled':os.getenv('ALLOW_EXTERNAL_AI','false').lower()=='true','fallback':'clinical_rules'}
+    return {'configured_provider':os.getenv('AI_PROVIDER','ollama'),'configured_model':os.getenv('AI_MODEL','qwen2.5:3b-instruct'),'providers':provider_manager.snapshot(),'external_ai_enabled':os.getenv('ALLOW_EXTERNAL_AI','false').lower()=='true','fallback':None}
 
 
 class OntologyRule(BaseModel):

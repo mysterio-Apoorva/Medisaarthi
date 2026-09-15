@@ -1,29 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { STORAGE_UNAVAILABLE, useStoredPreference } from '@/lib/browser-preferences';
 import { useRouter } from 'next/navigation';
 import { PatientHeader } from '@/components/patient/PatientHeader';
 import { ConsentCard } from '@/components/patient/ConsentCard';
 import { Button } from '@/components/ui/Button';
 import { ArrowRight, ArrowLeft, ShieldCheck } from 'lucide-react';
-import { Language } from '@/types';
 import { recordConsent } from '@/services/api';
 
 export default function PatientConsentPage() {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
-  const [language, setLanguage] = useState<Language>('hi');
+  const storedLanguage = useStoredPreference('medisaarthi_selected_lang');
+  const language = storedLanguage === 'en' ? 'en' : 'hi';
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      const storedLang = localStorage.getItem('medisaarthi_selected_lang');
-      if (storedLang === 'en' || storedLang === 'hi') {
-        setLanguage(storedLang);
-      }
-    } catch {}
-  }, []);
+  const [requestError, setError] = useState<string | null>(null);
+  const error = requestError || (storedLanguage === STORAGE_UNAVAILABLE ? 'Browser storage is unavailable. Enable site storage and retry.' : null);
 
   const handleContinue = async () => {
     if (!agreed) return;

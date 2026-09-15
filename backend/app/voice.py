@@ -8,6 +8,7 @@ import re
 import tempfile
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
 from starlette.concurrency import run_in_threadpool
@@ -20,7 +21,7 @@ _ALLOWED_AUDIO = {
     "audio/wav": (".wav", b"RIFF"),
     "audio/mp4": (".m4a", b""),
 }
-_models = {}
+_models: dict[str, Any] = {}
 _model_lock = Lock()
 
 

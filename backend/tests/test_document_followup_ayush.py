@@ -6,6 +6,7 @@ import json
 from uuid import uuid4
 
 import pymupdf
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.clinical_engine import AYUSH_FIELDS, next_question, required_fields
@@ -13,6 +14,27 @@ from backend.app.main import app
 from backend.app.routes.followups import create_follow_up_plan
 from backend.app.store import now, store
 from backend.tests.test_current_system import _expect, _new_encounter
+from backend.app.document_processing import PageResult, _entities_from_page
+
+
+@pytest.mark.parametrize('line,flag', [
+    ('Hemoglobin: 11.2 g/dL (12.0-15.0)', 'LOW'),
+    ('Hemoglobin: 14 g/dL (reference range: 12 - 16)', 'NORMAL'),
+    ('Glucose: 168 mg/dL [normal: 70-110]', 'HIGH'),
+    ('Creatinine: 1.0 mg/dL', None),
+])
+def test_lab_reference_range_formats(line, flag):
+    entities = _entities_from_page(PageResult(1, line, 'TEXT', 1.0))
+    lab = next(entity for entity in entities if entity['entity_type'] == 'INVESTIGATION')
+    assert lab['abnormal_status'] == flag
+    assert lab['evidence'] == line
+
+
+@pytest.mark.parametrize('line,value', [('Height: 1.75 m', 'Height: 1.75 m'), ('Temperature: 98.6 F', 'Temperature: 98.6 F'), ('SpO2: 98%', 'SpO2: 98 %'), ('BP: 120/80 mmHg', 'Blood pressure: 120/80 mmHg')])
+def test_document_vitals_preserve_units_and_decimal_height(line, value):
+    entities = _entities_from_page(PageResult(1, line, 'TEXT', 1.0))
+    vital = next(e for e in entities if e['entity_type'] == 'VITAL')
+    assert vital['value'] == value and vital['evidence'] == line
 
 
 def test_ayush_mode_has_structured_patient_reported_questions():

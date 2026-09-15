@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.app.clinical_engine import ADDITIONAL_DOCUMENT_FIELDS, AYUSH_FIELDS, QUESTIONS, BOOL_FIELDS, completeness, factual_summary, red_flags
 from backend.app.security import AuthenticatedUser, assert_patient_access, current_user, require_roles
@@ -73,6 +73,12 @@ class ReconciliationDecision(BaseModel):
 class FinalizeInput(BaseModel):
     treatment_plan: str | None = Field(default=None, max_length=2000)
     follow_up_at: str | None = Field(default=None, max_length=40)
+
+    @model_validator(mode='after')
+    def require_saved_prescription(self):
+        if self.treatment_plan is not None or self.follow_up_at is not None:
+            raise ValueError('Save treatment advice and follow-up in the prescription before finalizing')
+        return self
 
 
 def _latest_encounter(db, patient_id: str):
@@ -198,6 +204,7 @@ def correct(patient_id: str, correction: DoctorCorrection, user: AuthenticatedUs
     if correction.field_name not in EDITABLE_FIELDS:
         raise HTTPException(status_code=422, detail="This field cannot be corrected through this endpoint")
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         assert_patient_access(db, user, patient_id)
         encounter = _latest_encounter(db, patient_id)
         if not encounter:
@@ -221,8 +228,9 @@ def correct(patient_id: str, correction: DoctorCorrection, user: AuthenticatedUs
 
 
 @router.post("/encounters/{encounter_id}/finalize")
-def finalize(encounter_id: str, payload: FinalizeInput | None = None, user: AuthenticatedUser = Depends(require_roles("DOCTOR", "ADMIN"))):
+def finalize(encounter_id: str, payload: FinalizeInput | None = None, user: AuthenticatedUser = Depends(require_roles("DOCTOR"))):
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         row = db.execute("SELECT * FROM encounters WHERE encounter_id=?", (encounter_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Encounter not found")
@@ -236,6 +244,13 @@ def finalize(encounter_id: str, payload: FinalizeInput | None = None, user: Auth
         open_items = db.execute("SELECT COUNT(*) AS count FROM reconciliation_items WHERE encounter_id=? AND status='OPEN'", (encounter_id,)).fetchone()["count"]
         if open_items:
             raise HTTPException(status_code=409, detail="Resolve document reconciliation items before finalizing")
+        from backend.app.routes.records import prescription_record, snapshot_record, recorded_allergies
+        prescription = prescription_record(db, encounter_id)
+        if not prescription:
+            raise HTTPException(409, 'Save a prescription or an explicit no-medicines plan before finalizing')
+        review = prescription.get('allergy_review')
+        if prescription['medicines'] and (not review or review['allergies'] != recorded_allergies(db, encounter_id)):
+            raise HTTPException(409, 'Review the current allergy information and save the prescription again before finalizing')
         db.execute("UPDATE encounters SET status='FINALIZED',stage='FINALIZED',finalized_at=?,revision=revision+1 WHERE encounter_id=?", (now(), encounter_id))
         db.execute("INSERT INTO timeline_events(event_id,patient_id,encounter_id,event_type,title,detail,source,confidence,occurred_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)", (f"EVT_{uuid4().hex}", encounter["patient_id"], encounter_id, "ENCOUNTER_FINALIZED", "Clinician finalized intake", "Final clinical verification completed.", "DOCTOR_ENTERED", 1.0, now(), now()))
         from backend.app.routes.followups import create_follow_up_plan
@@ -244,9 +259,10 @@ def finalize(encounter_id: str, payload: FinalizeInput | None = None, user: Auth
             patient_id=encounter["patient_id"],
             encounter_id=encounter_id,
             created_by=user.user_id,
-            instructions=payload.treatment_plan if payload else None,
-            follow_up_at=payload.follow_up_at if payload else None,
+            instructions=prescription['advice'],
+            follow_up_at=prescription['follow_up_at'],
         )
+        snapshot_record(db, encounter_id, user)
         store.audit(db, user.user_id, "ENCOUNTER_FINALIZED", "ENCOUNTER", encounter_id)
         return {"encounter_id": encounter_id, "status": "FINALIZED", "finalized_by": user.display_name, "finalized_at": now(), "follow_up_plan_id": plan["follow_up_plan_id"]}
 
@@ -273,7 +289,8 @@ def patient_audit(patient_id: str, user: AuthenticatedUser = Depends(require_rol
         # Audit metadata deliberately contains no raw patient answers; retain only entries
         # tied to facts belonging to this patient's latest encounter where possible.
         fact_ids = {row["fact_id"] for row in db.execute("SELECT fact_id FROM clinical_facts WHERE encounter_id=?", (encounter["encounter_id"],)).fetchall()}
-        return [row for row in rows if row["resource_id"] in fact_ids or row["resource_id"] == encounter["encounter_id"]]
+        reconciliation_ids = {row['reconciliation_id'] for row in db.execute('SELECT reconciliation_id FROM reconciliation_items WHERE encounter_id=?', (encounter['encounter_id'],))}
+        return [row for row in rows if row["resource_id"] in fact_ids | reconciliation_ids or row["resource_id"] == encounter["encounter_id"]]
 
 
 @router.get("/encounters/{encounter_id}/reconciliation")
@@ -289,6 +306,7 @@ def reconciliations(encounter_id: str, user: AuthenticatedUser = Depends(require
 @router.post("/reconciliation/{item_id}")
 def reconcile(item_id: str, decision: ReconciliationDecision, user: AuthenticatedUser = Depends(require_roles("DOCTOR", "ADMIN"))):
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         item_row = db.execute("SELECT * FROM reconciliation_items WHERE reconciliation_id=?", (item_id,)).fetchone()
         if not item_row:
             raise HTTPException(status_code=404, detail="Reconciliation item not found")
@@ -313,6 +331,13 @@ def reconcile(item_id: str, decision: ReconciliationDecision, user: Authenticate
         if item.get("document_id"):
             verification = "REJECTED" if decision.action == "REJECTED" else "VERIFIED"
             db.execute("UPDATE document_entities SET verification_status=?,updated_at=? WHERE document_id=? AND field_name=?", (verification, now(), item["document_id"], item["field_name"]))
+            entity_types = {row['entity_type'] for row in db.execute('SELECT DISTINCT entity_type FROM document_entities WHERE document_id=? AND field_name=?', (item['document_id'], item['field_name']))}
+            for entity_type in entity_types:
+                db.execute('UPDATE timeline_events SET verification_status=? WHERE encounter_id=? AND document_id=? AND event_type=?',
+                           ('RECONCILED' if decision.action == 'MERGED' else verification, item['encounter_id'], item['document_id'], f'DOCUMENT_{entity_type}'))
+        db.execute('INSERT INTO timeline_events(event_id,patient_id,encounter_id,event_type,title,detail,source,confidence,occurred_at,created_at,document_id,page_number,verification_status,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                   (f'EVT_{uuid4().hex}', encounter['patient_id'], item['encounter_id'], 'RECONCILIATION_RESOLVED', f'Clinician reviewed {item["field_name"].replace("_", " ")}',
+                    f'{decision.action}: {value}', 'DOCTOR_ENTERED', 1.0, now(), now(), item.get('document_id'), item.get('page_number'), 'VERIFIED', json.dumps({'reconciliation_id': item_id, 'decision': decision.action})))
         db.execute("UPDATE encounters SET revision=revision+1 WHERE encounter_id=?", (item["encounter_id"],))
         store.audit(db, user.user_id, "RECONCILIATION_RESOLVED", "RECONCILIATION", item_id, {"action": decision.action})
         return {"reconciliation_id": item_id, "status": decision.action}

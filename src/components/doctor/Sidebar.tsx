@@ -3,15 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  HeartPulse,
-  LayoutDashboard,
-  Users,
-  ShieldCheck,
-  UserCheck,
-  LogOut,
-  Stethoscope,
-} from 'lucide-react';
+import { HeartPulse, LayoutDashboard, Users, UserCheck, LogOut } from 'lucide-react';
 
 export const DoctorSidebar: React.FC = () => {
   const pathname = usePathname();

@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { DoctorNarrativeResponse } from '@/types';
-import { Sparkles, ShieldAlert, FileText, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Sparkles, ShieldAlert } from 'lucide-react';
 
 interface NarrativeSummaryCardProps {
   narrative: DoctorNarrativeResponse | null;

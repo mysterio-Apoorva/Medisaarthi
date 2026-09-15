@@ -1,7 +1,7 @@
 import React from 'react';
 import { Medication } from '@/types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Pill, Clock, Activity } from 'lucide-react';
+import { Pill, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface MedicationsCardProps {

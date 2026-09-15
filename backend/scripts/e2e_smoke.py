@@ -7,12 +7,18 @@ import io
 import wave
 from pathlib import Path
 import sys
+import os
 
 import pymupdf
 from fastapi.testclient import TestClient
 
 # Script execution sets sys.path to backend/scripts; make repository imports explicit.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+test_root = Path(tempfile.mkdtemp(prefix='medikiosk-smoke-'))
+os.environ['DATABASE_URL'] = f'sqlite:///{test_root / "smoke.sqlite3"}'
+os.environ['DOCUMENT_UPLOAD_DIR'] = str(test_root / 'uploads')
+os.environ['SEED_DEMO_DATA'] = 'true'
+os.environ['AI_PROVIDER'] = 'clinical_rules'
 from backend.app.main import app
 
 
@@ -74,6 +80,7 @@ def main() -> None:
             uploaded = expect(client.post(f"/documents/encounters/{encounter_id}", files={"file": ("synthetic-report.pdf", Path(temp.name).read_bytes(), "application/pdf")}), 201)
             assert uploaded["processing_status"] == "PROCESSED", uploaded
 
+        revision = client.get(f'/interviews/{encounter_id}').json()['revision']
         expect(client.post(f"/interviews/{encounter_id}/submit", json={"expected_revision": revision, "reviewed": True}), 200)
         expect(client.post("/auth/login", json={"email": "doctor.demo@medikiosk.local", "password": "DemoPass!2026"}), 200)
         summary = expect(client.get("/doctor/patients/P1001/summary"), 200)
@@ -83,6 +90,7 @@ def main() -> None:
         for item in summary["reconciliation"]:
             expect(client.post(f"/doctor/reconciliation/{item['reconciliation_id']}", json={"action": "APPROVED"}), 200)
         expect(client.post("/doctor/patients/P1001/facts", json={"field_name": "severity", "value": 7, "reason": "Clinician confirmed severity after review"}), 200)
+        expect(client.put(f'/records/{encounter_id}/prescription', json={'expected_revision':0,'medicines':[],'advice':'Synthetic smoke-test instructions','no_medicines_reason':'No medicines for this software test'}),200)
         expect(client.post(f"/doctor/encounters/{encounter_id}/finalize"), 200)
         expect(client.post("/auth/login", json={"email": "admin.demo@medikiosk.local", "password": "DemoPass!2026"}), 200)
         audits = expect(client.get("/admin/audit-logs"), 200)
@@ -91,7 +99,7 @@ def main() -> None:
         assert any(item["role"] == "ADMIN" for item in users)
         saved_rule = expect(client.put("/admin/ontology/RULE_E2E_SMOKE", json={"concept": "e2e smoke", "payload": {"synonyms": ["test-only"], "required": []}, "enabled": True}), 200)
         assert saved_rule["rule_id"] == "RULE_E2E_SMOKE"
-    print("E2E smoke passed: patient intake -> rules/AI fallback -> document reconciliation -> doctor finalization -> audit")
+    print("Integration smoke passed: explicit rules mode -> document reconciliation -> saved treatment plan -> finalization -> audit. Live AI/speech are tested separately.")
 
 
 if __name__ == "__main__":

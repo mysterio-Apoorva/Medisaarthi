@@ -71,7 +71,32 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
   const body: unknown = response.status === 204 ? undefined : await response.json().catch(() => undefined);
   if (!response.ok) throw new ApiError(response.status, messageFrom(body, `Request failed (${response.status})`), body);
+  if (response.status !== 204 && body === undefined) throw new ApiError(502, 'The service returned an invalid response. Please retry.');
   return body as T;
+}
+
+export type Medicine = { name: string; strength: string; dose: string; frequency: string; duration: string; route: string; instructions: string };
+export type Prescription = { revision: number; medicines: Medicine[]; advice: string; no_medicines_reason: string | null; follow_up_at: string | null; doctor_name: string; allergy_review: { allergies: string[] | null; reviewed_by: string; reviewed_at: string } | null };
+export type Observation = { observation_id: string; kind: 'VITAL' | 'TEST'; name: string; value: number; unit: string; measured_at: string; source: string; voided_at: string | null; void_reason: string | null };
+export type EncounterRecord = { encounter_id: string; status: string; observations: Observation[]; prescription: Prescription | null; pdf_available: boolean; allergies: string[] | null };
+export function getEncounterRecord(id: string): Promise<EncounterRecord> { return request(`/records/${encodeURIComponent(id)}`); }
+export function saveObservation(id: string, observation: Pick<Observation, 'kind' | 'name' | 'value' | 'unit' | 'measured_at'> & { request_id: string }): Promise<Observation> {
+  return request(`/records/${encodeURIComponent(id)}/observations`, { method: 'POST', body: JSON.stringify(observation) });
+}
+export function voidObservation(id: string, observationId: string, reason: string): Promise<Observation> {
+  return request(`/records/${encodeURIComponent(id)}/observations/${encodeURIComponent(observationId)}/void`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+export function savePrescription(id: string, prescription: Omit<Prescription, 'revision' | 'doctor_name' | 'allergy_review'> & { expected_revision: number; allergies_reviewed: boolean; allergy_review: string[] | null }): Promise<Prescription> {
+  return request(`/records/${encodeURIComponent(id)}/prescription`, { method: 'PUT', body: JSON.stringify(prescription) });
+}
+export async function downloadRecordPdf(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/records/${encodeURIComponent(id)}/pdf`, { credentials: 'include' });
+  if (!response.ok) throw new ApiError(response.status, messageFrom(await response.json().catch(() => null), 'PDF generation failed. Please retry.'));
+  const blob = await response.blob();
+  if (blob.type !== 'application/pdf' || blob.size < 100) throw new Error('The service did not return a valid PDF. Please retry.');
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = `${id}.pdf`; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 export type CurrentUser = { user_id: string; email: string; role: 'PATIENT' | 'DOCTOR' | 'ADMIN'; patient_id?: string | null; display_name: string };
@@ -83,6 +108,15 @@ export async function login(email: string, password: string): Promise<CurrentUse
 
 export async function logout(): Promise<void> { await request<void>('/auth/logout', { method: 'POST' }); }
 export async function getCurrentUser(): Promise<CurrentUser> { return (await request<{ user: CurrentUser }>('/auth/me')).user; }
+export async function selectManualIntake(encounterId?: string): Promise<IntakeSnapshot> {
+  if (encounterId) {
+    await request(`/interviews/${encodeURIComponent(encounterId)}/mode`, { method: 'PATCH', body: JSON.stringify({ processing_mode: 'MANUAL' }) });
+    return getIntakeSnapshot(encounterId);
+  }
+  const result = await request<IntakeSnapshot>('/interviews/start', { method: 'POST', body: JSON.stringify({ patient_id: localStorage.getItem('medisaarthi_current_patient_id'), consent_id: localStorage.getItem('medisaarthi_current_consent_id'), language: localStorage.getItem('medisaarthi_selected_lang') || 'en', care_mode: localStorage.getItem('medisaarthi_care_mode') || 'MODERN', processing_mode: 'MANUAL' }) });
+  localStorage.setItem('medisaarthi_current_interview_id', result.encounter_id);
+  return result;
+}
 
 export async function registerPatient(payload: { name: string; age: number; gender: 'Male' | 'Female' | 'Other'; language: Language; email: string; password: string; phone?: string }): Promise<{ patient_id: string; user: CurrentUser }> {
   return request('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
@@ -147,7 +181,7 @@ export async function correctPatientFact(id: string, field: string, value: Recor
 export type DocumentUploadResult = {
   document_id: string;
   processing_status: 'PROCESSED' | 'NEEDS_REVIEW' | 'FAILED';
-  classification: string;
+  classification: string | null;
   extracted_count: number;
   confidence: number;
   error_code?: string | null;
@@ -155,6 +189,8 @@ export type DocumentUploadResult = {
 
 export type EncounterDocument = {
   document_id: string;
+  can_retry: boolean;
+  can_remove: boolean;
   original_name: string;
   processing_status: 'PROCESSED' | 'NEEDS_REVIEW' | 'FAILED';
   classification?: string | null;
@@ -167,6 +203,7 @@ export type EncounterDocument = {
 export type DocumentExtraction = {
   document_id: string;
   status: string;
+  error_code?: string | null;
   classification?: string | null;
   classification_confidence?: number | null;
   document_date?: string | null;
@@ -191,7 +228,7 @@ export async function listEncounterDocuments(interviewId: string): Promise<Encou
 export async function getDocumentExtraction(documentId: string): Promise<DocumentExtraction> {
   return request(`/documents/${encodeURIComponent(documentId)}/extraction`);
 }
-export async function retryDocumentProcessing(documentId: string): Promise<DocumentUploadResult> {
+export async function retryDocumentProcessing(documentId: string): Promise<Pick<DocumentUploadResult, 'document_id' | 'processing_status' | 'error_code'> & {entity_count: number; processing_steps: string[]}> {
   return request(`/documents/${encodeURIComponent(documentId)}/retry`, { method: 'POST' });
 }
 export async function deleteEncounterDocument(documentId: string): Promise<void> {
@@ -234,6 +271,7 @@ function summaryAdapter(summary: NewSummary): DoctorSummaryResponse {
   const value = (field: string): string | undefined => state[field] === undefined ? undefined : String(state[field]);
   const provenance = (field: string) => summary.facts.find(fact => fact.field_name === field);
   return {
+    record_revision: summary.encounter?.revision,
     patient_snapshot: { ...summary.patient_snapshot, preferred_language: summary.patient_snapshot.preferred_language, registration_time: undefined },
     current_complaint: { chief_complaint: value('chief_complaint'), duration: value('duration'), severity: value('severity'), location: value('location'), trigger: value('exertion'), associated_symptoms: Object.entries(state).filter(([field, item]) => ['breathlessness', 'sweating', 'nausea', 'vomiting', 'cough', 'fever'].includes(field) && item === true).map(([field]) => field.replace('_', ' ')).join(', '), facts: summary.facts.map((fact) => ({ field_name: fact.field_name, value: String(fact.value), status: fact.status || 'reported', source: fact.source, confidence: fact.confidence })) },
     past_medical_history: list('past_medical_history').map((condition) => ({ condition, source: provenance('past_medical_history')?.source, confidence: provenance('past_medical_history')?.confidence })),
@@ -307,11 +345,12 @@ export type FollowUpSession = { follow_up_session_id: string; follow_up_plan_id:
 export type FollowUpCheckIn = {
   plan: { follow_up_plan_id: string; patient_id: string; encounter_id: string; instructions?: string | null; follow_up_at?: string | null; status: string; created_at: string };
   session: FollowUpSession;
-  record_context: { chief_complaint?: string; medications: string[]; allergies: string[]; doctor_instructions: string };
+  record_context: { language: Language; chief_complaint?: string; medications: string[]; allergies: string[]; doctor_instructions: string };
   responses: { follow_up_response_id: string; question_id: string; question_text: string; response_text: string; source: string; created_at: string }[];
   next_question: FollowUpQuestion | null;
   alerts: FollowUpAlert[];
   resumed?: boolean;
+  ai_warning?: string;
 };
 export type FollowUpPlanOverview = { plan: FollowUpCheckIn['plan']; sessions: FollowUpSession[]; alerts: FollowUpAlert[]; last_check_in: FollowUpSession | null };
 export async function getPatientFollowUps(patientId: string): Promise<FollowUpPlanOverview[]> {
@@ -346,4 +385,3 @@ export async function saveAdminOntologyRule(ruleId: string, payload: { concept: 
   return request(`/admin/ontology/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 export async function getDashboardStats() { const patients = await getDoctorPatients(); return { patientsWaiting: patients.length, interviewsCompleted: patients.filter((patient) => patient.status === 'Ready for review' || patient.status === 'Verified').length, needsReview: patients.filter((patient) => patient.status === 'Ready for review').length, priorityReviews: patients.filter((patient) => patient.priority !== 'Normal').length }; }
-export function resetDemoData(): void { if (typeof window !== 'undefined') window.sessionStorage.clear(); }

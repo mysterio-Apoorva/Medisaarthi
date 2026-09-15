@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowRight, Check, HelpCircle, Keyboard, Mic, Pause, Play, X } from 'lucide-react';
-import { getIntakeSnapshot, sendIntakeAnswer, startInterviewSession, transcribeInterviewAudio, ApiError, type IntakeSnapshot } from '@/services/api';
+import { getIntakeSnapshot, sendIntakeAnswer, startInterviewSession, transcribeInterviewAudio, selectManualIntake, ApiError, type IntakeSnapshot } from '@/services/api';
 import { TalkingAvatar } from '@/components/patient/TalkingAvatar';
 import { useAssistantSpeech } from '@/components/patient/useAssistantSpeech';
 import { VoiceCapture, voiceConfig } from '@/lib/voice-activity';
@@ -106,6 +106,9 @@ export default function PatientInterviewPage() {
     };
     async function runTurn() {
       setError('');
+      if (current.ai_warning && current.status === 'ACTIVE' && !current.next_question?.text) {
+        setError(current.ai_warning); setPhase('AI_ERROR'); setPaused(true); return;
+      }
       if (safetyKey && safetyKey !== acknowledged) {
         const message = isHindi
           ? 'आपकी बताई तकलीफ के लिए तुरंत स्वास्थ्य कर्मचारी की मदद ज़रूरी है। कृपया अभी कर्मचारी को बुलाएँ। हम बातचीत रोक रहे हैं।'
@@ -213,6 +216,7 @@ export default function PatientInterviewPage() {
       const next = await sendIntakeAnswer(snapshot.interview_id, draft.trim(), snapshot.revision);
       setLastTranscript(draft.trim()); setDraft(''); setSnapshot(next); setEditing(false);
       setPaused(false); setPhase(next.status === 'ACTIVE' ? 'IDLE' : 'COMPLETED');
+      if (next.ai_warning && !next.next_question?.text && next.status === 'ACTIVE') { setError(next.ai_warning); setPhase('AI_ERROR'); setPaused(true); }
     } catch (err) {
       const latest = await getIntakeSnapshot(snapshot.interview_id).catch(() => null);
       if (latest && latest.revision !== snapshot.revision) { setSnapshot(latest); setDraft(''); setEditing(false); }
@@ -261,6 +265,8 @@ export default function PatientInterviewPage() {
       </div>
     </section>
     <footer className="relative z-10 mx-auto flex w-full max-w-4xl flex-col items-center gap-4 px-5 py-5">
+      {phase === 'AI_ERROR' && <button className={buttonClass} onClick={async () => { interrupt(); try { const saved = await selectManualIntake(snapshot?.encounter_id); setSnapshot(saved); setTyping(true); setPaused(true); setError(''); setPhase('PAUSED'); } catch (e) { setError(e instanceof Error ? e.message : 'Could not select manual intake'); } }}>Continue with manual intake</button>}
+      {snapshot?.next_question && 'generation_method' in snapshot.next_question && snapshot.next_question.generation_method === 'MANUAL_PROTOCOL' && <p>Manual intake: questions follow the intake protocol. Your entered answers are saved for clinician review.</p>}
       <div className="flex flex-wrap justify-center gap-3">
         {phase !== 'SAFETY_PAUSE' && <>
           <button className={buttonClass} onClick={() => { if (paused || typing || editing || phase.endsWith('ERROR')) void resume(); else { interrupt(); setPaused(true); setPhase('PAUSED'); } }}>

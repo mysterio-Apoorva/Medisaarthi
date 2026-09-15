@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import sqlite3
 from collections import defaultdict, deque
 from uuid import uuid4
 from contextlib import asynccontextmanager
@@ -22,6 +23,7 @@ from backend.app.store import store
 from backend.app.tts import router as speech_router
 from backend.app.routes.knowledge import router as knowledge_router
 from backend.app.routes.followups import router as follow_up_router
+from backend.app.routes.records import router as record_router
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("medikiosk")
@@ -45,9 +47,9 @@ app = FastAPI(
 # is the conventional second local Next.js instance used for a production-build
 # or browser-test run while a developer keeps port 3000 open.
 allowed_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001").split(",") if origin.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 
-_request_windows = defaultdict(deque)
+_request_windows: defaultdict[tuple[str, str], deque[float]] = defaultdict(deque)
 
 
 @app.middleware('http')
@@ -90,6 +92,12 @@ async def unexpected_error(_: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "The service could not complete this request. Please retry."})
 
 
+@app.exception_handler(sqlite3.OperationalError)
+async def database_unavailable(_: Request, exc: sqlite3.OperationalError):
+    logger.exception('database_operation_failed type=%s', type(exc).__name__)
+    return JSONResponse(status_code=503, content={'detail': 'The database is temporarily unavailable. Please retry.'})
+
+
 app.include_router(auth_router)
 app.include_router(patient_router)
 app.include_router(interview_router)
@@ -99,6 +107,7 @@ app.include_router(admin_router)
 app.include_router(speech_router)
 app.include_router(knowledge_router)
 app.include_router(follow_up_router)
+app.include_router(record_router)
 
 
 @app.get("/")
@@ -111,7 +120,7 @@ def health():
     try:
         with store.connection() as db:
             db.execute("SELECT 1").fetchone()
-        return {"status": "ok", "persistence": "sqlite", "ai_provider": os.getenv("AI_PROVIDER", "ollama"), "ai_fallback": "clinical_rules"}
+        return {"status": "ok", "persistence": "sqlite", "ai_provider": os.getenv("AI_PROVIDER", "ollama"), "ai_fallback": None}
     except Exception:
         logger.exception("health_check_failed")
         return JSONResponse(status_code=503, content={"status": "unavailable"})

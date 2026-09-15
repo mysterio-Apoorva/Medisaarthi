@@ -27,6 +27,7 @@ def register_patient(payload: PatientRegistration, response: Response):
     created = now()
     try:
         with store.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
             if db.execute("SELECT 1 FROM users WHERE email=?", (payload.email,)).fetchone():
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An account already exists for this email")
             db.execute(
@@ -42,7 +43,7 @@ def register_patient(payload: PatientRegistration, response: Response):
         raise
     token, expires_at = create_session(user_id)
     response.set_cookie("medikiosk_session", token, **cookie_kwargs(expires_at))
-    return {"user": {"user_id": user_id, "role": "PATIENT", "patient_id": patient_id, "display_name": payload.name}, "patient_id": patient_id}
+    return {"user": {"user_id": user_id, "email": payload.email, "role": "PATIENT", "patient_id": patient_id, "display_name": payload.name}, "patient_id": patient_id}
 
 
 @router.post("/login")

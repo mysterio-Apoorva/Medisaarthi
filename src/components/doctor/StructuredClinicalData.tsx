@@ -2,18 +2,8 @@
 
 import React from 'react';
 import { DoctorSummaryResponse } from '@/types';
-import {
-  Activity,
-  FileHeart,
-  Pill,
-  ShieldAlert,
-  Clock,
-  AlertTriangle,
-  HelpCircle,
-  Database,
-  CheckCircle2,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/Badge';
+import { Activity, FileHeart, Pill, ShieldAlert, AlertTriangle, HelpCircle, Database } from 'lucide-react';
+
 
 interface StructuredClinicalDataProps {
   summary: DoctorSummaryResponse;
@@ -23,9 +13,7 @@ export const StructuredClinicalData: React.FC<StructuredClinicalDataProps> = ({ 
   const cc = summary.current_complaint;
   const pastHistory = summary.past_medical_history || [];
   const medications = summary.medications || [];
-  const allergies = summary.allergies || [];
-  const importantFindings = summary.important_findings || [];
-  const missingInfo = summary.missing_information || [];
+  const allergies = summary.allergies || [];  const missingInfo = summary.missing_information || [];
   const priorityFlags = summary.priority_flags || [];
   const meta = summary.interview_metadata;
 

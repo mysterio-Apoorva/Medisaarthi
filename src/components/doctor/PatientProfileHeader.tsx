@@ -3,18 +3,9 @@
 import React from 'react';
 import Link from 'next/link';
 import { DoctorSummaryResponse } from '@/types';
-import { Badge } from '@/components/ui/Badge';
+
 import { Button } from '@/components/ui/Button';
-import {
-  ArrowLeft,
-  Edit3,
-  CheckCircle2,
-  Clock,
-  ShieldCheck,
-  ShieldAlert,
-  FileText,
-  UserCheck,
-} from 'lucide-react';
+import { ArrowLeft, Edit3, CheckCircle2, ShieldCheck, ShieldAlert, FileText } from 'lucide-react';
 
 interface PatientProfileHeaderProps {
   summary: DoctorSummaryResponse;

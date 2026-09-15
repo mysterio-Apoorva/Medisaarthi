@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -165,16 +166,27 @@ async def upload(encounter_id: str, file: UploadFile = File(...), user: Authenti
     upload_root = Path(os.getenv("DOCUMENT_UPLOAD_DIR", "backend/data/uploads"))
     path, original_name, size_bytes = await validate_and_store(file, upload_root)
     try:
+        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        with store.connection() as db:
+            if db.execute('SELECT 1 FROM documents WHERE encounter_id=? AND content_hash=?', (encounter_id, content_hash)).fetchone():
+                raise HTTPException(409, 'This document has already been uploaded to this encounter')
         processed = await run_in_threadpool(orchestrator.document.run, path)
         document_id = f"DOC_{uuid4().hex}"
         with store.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            current = db.execute('SELECT status FROM encounters WHERE encounter_id=?', (encounter_id,)).fetchone()
+            if not current or current['status'] == 'FINALIZED':
+                raise HTTPException(409, 'The encounter was finalized while the document was processing')
+            if db.execute('SELECT 1 FROM documents WHERE encounter_id=? AND content_hash=?', (encounter_id, content_hash)).fetchone():
+                raise HTTPException(409, 'This document has already been uploaded to this encounter')
             db.execute(
                 """INSERT INTO documents(document_id,patient_id,encounter_id,original_name,stored_name,mime_type,size_bytes,classification,processing_status,error_code,uploaded_by,uploaded_at,document_date,classification_confidence,processing_detail_json)
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (document_id, encounter["patient_id"], encounter_id, original_name, path.name, file.content_type or "application/octet-stream", size_bytes, processed.classification, processed.processing_status, processed.error_code, user.user_id, now(), processed.document_date, processed.classification_confidence, json.dumps(processed.processing_steps)),
             )
             _persist_processed_document(db, document_id=document_id, patient_id=encounter["patient_id"], encounter_id=encounter_id, processed=processed)
+            db.execute('UPDATE documents SET content_hash=? WHERE document_id=?', (content_hash, document_id))
+            db.execute('UPDATE encounters SET revision=revision+1 WHERE encounter_id=?', (encounter_id,))
             store.audit(db, user.user_id, "DOCUMENT_PROCESSED", "DOCUMENT", document_id, {"status": processed.processing_status, "classification": processed.classification, "entity_count": len(processed.entities)})
             result = _document_with_counts(db, document_id)
     except Exception:
@@ -233,6 +245,7 @@ def extraction(document_id: str, user: AuthenticatedUser = Depends(current_user)
         return {
             "document_id": document_id,
             "status": document["processing_status"],
+            "error_code": document["error_code"],
             "classification": document["classification"],
             "classification_confidence": document["classification_confidence"],
             "document_date": document["document_date"],
@@ -264,6 +277,10 @@ def list_for_encounter(encounter_id: str, user: AuthenticatedUser = Depends(curr
                 (encounter_id,),
             )
         ]
+        reviewed = {row['document_id'] for row in db.execute("SELECT DISTINCT document_id FROM reconciliation_items WHERE encounter_id=? AND status!='OPEN'", (encounter_id,))}
+        for document in documents:
+            document['can_retry'] = encounter['status'] != 'FINALIZED' and document['document_id'] not in reviewed
+            document['can_remove'] = document['can_retry'] and user.role == 'PATIENT'
         store.audit(db, user.user_id, "DOCUMENT_LIST_VIEWED", "ENCOUNTER", encounter_id)
         return documents
 
@@ -278,6 +295,8 @@ async def retry(document_id: str, user: AuthenticatedUser = Depends(current_user
         assert_patient_access(db, user, document["patient_id"])
         if document["encounter_status"] == "FINALIZED":
             raise HTTPException(status_code=409, detail="Finalized records cannot be reprocessed")
+        if db.execute("SELECT 1 FROM reconciliation_items WHERE document_id=? AND status!='OPEN'", (document_id,)).fetchone():
+            raise HTTPException(409, 'A clinician has reviewed this document; its extraction cannot be replaced')
         root = Path(os.getenv("DOCUMENT_UPLOAD_DIR", "backend/data/uploads")).resolve()
         path = (root / document["stored_name"]).resolve()
         if path.parent != root or not path.is_file():
@@ -285,7 +304,15 @@ async def retry(document_id: str, user: AuthenticatedUser = Depends(current_user
     processed = await run_in_threadpool(classify_and_extract, path)
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
+        current = db.execute('SELECT e.status FROM documents d JOIN encounters e ON e.encounter_id=d.encounter_id WHERE d.document_id=?', (document_id,)).fetchone()
+        if not current:
+            raise HTTPException(404, 'The document was removed during processing')
+        if current['status'] == 'FINALIZED':
+            raise HTTPException(409, 'The encounter was finalized during processing')
+        if db.execute("SELECT 1 FROM reconciliation_items WHERE document_id=? AND status!='OPEN'", (document_id,)).fetchone():
+            raise HTTPException(409, 'A clinician has reviewed this document; its extraction cannot be replaced')
         _persist_processed_document(db, document_id=document_id, patient_id=document["patient_id"], encounter_id=document["encounter_id"], processed=processed, replace=True)
+        db.execute('UPDATE encounters SET revision=revision+1 WHERE encounter_id=?', (document['encounter_id'],))
         store.audit(db, user.user_id, "DOCUMENT_REPROCESSED", "DOCUMENT", document_id, {"status": processed.processing_status, "entity_count": len(processed.entities)})
     return {"document_id": document_id, "processing_status": processed.processing_status, "entity_count": len(processed.entities), "error_code": processed.error_code, "processing_steps": processed.processing_steps}
 
@@ -293,6 +320,7 @@ async def retry(document_id: str, user: AuthenticatedUser = Depends(current_user
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete(document_id: str, user: AuthenticatedUser = Depends(current_user)):
     with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
         row = db.execute("SELECT d.*, e.status AS encounter_status FROM documents d JOIN encounters e ON e.encounter_id=d.encounter_id WHERE d.document_id=?", (document_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -300,11 +328,15 @@ def delete(document_id: str, user: AuthenticatedUser = Depends(current_user)):
         assert_patient_access(db, user, document["patient_id"])
         if user.role != "PATIENT" or document["encounter_status"] == "FINALIZED":
             raise HTTPException(status_code=409, detail="This document can no longer be removed")
+        if db.execute("SELECT 1 FROM reconciliation_items WHERE document_id=? AND status!='OPEN'", (document_id,)).fetchone():
+            raise HTTPException(409, 'Clinician-reviewed source documents must be retained')
         root = Path(os.getenv("DOCUMENT_UPLOAD_DIR", "backend/data/uploads")).resolve()
         path = (root / document["stored_name"]).resolve()
         if path.parent != root:
             raise HTTPException(status_code=404, detail="Document file is unavailable")
         db.execute("DELETE FROM reconciliation_items WHERE document_id=? AND status='OPEN'", (document_id,))
+        db.execute('DELETE FROM timeline_events WHERE document_id=?', (document_id,))
         db.execute("DELETE FROM documents WHERE document_id=?", (document_id,))
+        db.execute('UPDATE encounters SET revision=revision+1 WHERE encounter_id=?', (document['encounter_id'],))
         store.audit(db, user.user_id, "DOCUMENT_REMOVED", "DOCUMENT", document_id)
     path.unlink(missing_ok=True)

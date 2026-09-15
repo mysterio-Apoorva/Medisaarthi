@@ -4,16 +4,9 @@ import {
   UserCheck,
   Stethoscope,
   ShieldCheck,
-  Languages,
-  Mic,
-  FileText,
-  Activity,
   ArrowRight,
   Sparkles,
-  CheckCircle2,
-  Clock,
-  Database,
-} from 'lucide-react';
+  } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { MediKioskLogo } from '@/components/brand/MediKioskLogo';
 

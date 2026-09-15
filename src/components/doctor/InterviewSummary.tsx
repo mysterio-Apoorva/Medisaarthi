@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Sparkles, ShieldAlert, CheckCircle2, FileText } from 'lucide-react';
+import { Sparkles, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface InterviewSummaryProps {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Activity, Clock, Flame, Stethoscope, AlertCircle } from 'lucide-react';
+import { Activity, Clock, Flame } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 
 interface ComplaintCardProps {

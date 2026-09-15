@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { STORAGE_UNAVAILABLE, useStoredPreference } from '@/lib/browser-preferences';
 import { useRouter } from 'next/navigation';
 import { Language } from '@/types';
 import { PatientHeader } from '@/components/patient/PatientHeader';
@@ -11,25 +12,19 @@ import type { CareMode } from '@/services/api';
 
 export default function LanguageSelectionPage() {
   const router = useRouter();
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>('hi');
-  const [careMode, setCareMode] = useState<CareMode>('MODERN');
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('medisaarthi_selected_lang');
-      if (stored === 'en' || stored === 'hi') {
-        setSelectedLanguage(stored);
-      }
-      const storedMode = localStorage.getItem('medisaarthi_care_mode');
-      if (storedMode === 'MODERN' || storedMode === 'AYUSH') setCareMode(storedMode);
-    } catch {}
-  }, []);
+  const storedLanguage = useStoredPreference('medisaarthi_selected_lang');
+  const storedMode = useStoredPreference('medisaarthi_care_mode');
+  const [languageChoice, setSelectedLanguage] = useState<Language | null>(null);
+  const [modeChoice, setCareMode] = useState<CareMode | null>(null);
+  const selectedLanguage = languageChoice ?? (storedLanguage === 'en' ? 'en' : 'hi');
+  const careMode = modeChoice ?? (storedMode === 'AYUSH' ? 'AYUSH' : 'MODERN');
+  const [error, setError] = useState('');
 
   const handleContinue = () => {
     try {
       localStorage.setItem('medisaarthi_selected_lang', selectedLanguage);
       localStorage.setItem('medisaarthi_care_mode', careMode);
-    } catch {}
+    } catch { setError('Your selection could not be saved. Enable site storage and retry.'); return; }
     router.push('/patient/consent');
   };
 
@@ -38,6 +33,8 @@ export default function LanguageSelectionPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between text-slate-900">
       <PatientHeader currentStep={2} totalSteps={4} stepName="Language" />
+      {error && <p role="alert" className="p-4 text-rose-800">{error}</p>}
+      {storedLanguage === STORAGE_UNAVAILABLE && <p role="alert">Browser storage is unavailable. Enable site storage and retry.</p>}
 
       <main className="flex-1 max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col justify-center space-y-8 w-full">
         {/* Title & Prompt */}

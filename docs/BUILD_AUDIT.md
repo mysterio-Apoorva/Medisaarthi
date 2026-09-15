@@ -1,5 +1,7 @@
 # MediKiosk integration audit
 
+Historical report. Current implementation and verification: [END_TO_END_AUDIT.md](END_TO_END_AUDIT.md) and [API_AUDIT.md](API_AUDIT.md).
+
 Baseline: 2026-09-13. Existing Next.js 16 / React 19 / FastAPI / SQLite, session RBAC, local Qwen 2.5 3B, faster-whisper, PDF extraction preserved. Existing worktree changes predate this pass.
 
 Observed in source and headless Edge before implementation:

@@ -18,6 +18,7 @@ from backend.app.voice import SpeechToTextUnavailable, transcribe_upload
 from backend.app.clinical_validation import validate_fact
 from backend.app.ai.orchestrator import orchestrator
 from backend.app.question_budget import budget, plan_question, record_candidates, MIN_QUESTIONS
+from backend.app.ai.questions import phrase_question
 
 router = APIRouter(prefix="/interviews", tags=["Clinical Intake"])
 
@@ -34,6 +35,26 @@ class StartInput(BaseModel):
     language: Literal["en", "hi"] = "en"
     consent_id: str = Field(min_length=1, max_length=80)
     care_mode: Literal["MODERN", "AYUSH"] = "MODERN"
+    processing_mode: Literal['AI', 'MANUAL'] = 'AI'
+
+
+class ModeInput(BaseModel):
+    processing_mode: Literal['AI', 'MANUAL']
+
+
+@router.patch('/{encounter_id}/mode')
+def change_mode(encounter_id: str, payload: ModeInput, user: AuthenticatedUser = Depends(current_user)):
+    with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT * FROM encounters WHERE encounter_id=?', (encounter_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Encounter not found')
+        assert_patient_access(db, user, row['patient_id'])
+        if user.role != 'PATIENT' or row['status'] != 'ACTIVE':
+            raise HTTPException(409, 'Only an active patient interview can change processing mode')
+        db.execute('UPDATE encounters SET processing_mode=?,pending_question_json=NULL,revision=revision+1 WHERE encounter_id=?', (payload.processing_mode, encounter_id))
+        store.audit(db, user.user_id, 'INTAKE_MODE_CHANGED', 'ENCOUNTER', encounter_id, {'mode': payload.processing_mode})
+        return {'processing_mode': payload.processing_mode, 'revision': row['revision'] + 1}
 
 
 class AnswerInput(BaseModel):
@@ -104,6 +125,32 @@ def _planned_question(db, encounter, state, refresh=False):
     db.execute('UPDATE encounters SET pending_question_json=? WHERE encounter_id=?', (encoded, encounter['encounter_id']))
     encounter['pending_question_json'] = encoded
     return question
+
+
+def _deliver_question(result):
+    """Inference never holds a database write lock; saving an answer and asking are distinct."""
+    question = result.get('next_question')
+    if not question or question.get('generation_method'):
+        return result
+    try:
+        generated = phrase_question(question, result['clinical_state'], result['language'], result['encounter'].get('processing_mode') == 'MANUAL')
+    except HTTPException as exc:
+        result['next_question'] = {**question, 'text': '', 'generation_method': 'UNAVAILABLE'}
+        result['ai_warning'] = str(exc.detail)
+        return result
+    with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        current = db.execute('SELECT revision,status,pending_question_json FROM encounters WHERE encounter_id=?', (result['encounter_id'],)).fetchone()
+        if current['revision'] != result['revision'] or current['status'] != 'ACTIVE':
+            raise HTTPException(409, 'The interview changed while generating a question. Reload the saved record.')
+        stored = json.loads(current['pending_question_json']) if current['pending_question_json'] else None
+        if stored and stored.get('generation_method'):
+            generated = stored
+        else:
+            db.execute('UPDATE encounters SET pending_question_json=? WHERE encounter_id=?', (json.dumps(generated, ensure_ascii=False), result['encounter_id']))
+    result['next_question'] = generated
+    result['encounter']['pending_question_json'] = json.dumps(generated, ensure_ascii=False)
+    return result
 
 
 _TIMELINE_FACT_LABELS = {
@@ -232,12 +279,17 @@ def start(payload: StartInput, user: AuthenticatedUser = Depends(current_user)):
             raise HTTPException(status_code=409, detail="A current clinical intake consent is required")
         if consent["encounter_id"]:
             existing = dict(db.execute("SELECT * FROM encounters WHERE encounter_id=?", (consent["encounter_id"],)).fetchone())
+            if payload.processing_mode == 'MANUAL' and existing['status'] == 'ACTIVE' and existing['processing_mode'] != 'MANUAL':
+                db.execute("UPDATE encounters SET processing_mode='MANUAL',pending_question_json=NULL,revision=revision+1 WHERE encounter_id=?", (existing['encounter_id'],))
+                existing.update(processing_mode='MANUAL', pending_question_json=None, revision=existing['revision'] + 1)
             result = _response(db, existing)
+            db.commit()
+            result = _deliver_question(result)
             return {"message": "Existing interview resumed", "initial_question": result["next_question"], **result}
         encounter_id = f"ENC_{uuid4().hex}"
         db.execute(
-            "INSERT INTO encounters(encounter_id,patient_id,status,language,stage,revision,ai_provider,started_at,care_mode) VALUES(?,?,?,?,?,?,?,?,?)",
-            (encounter_id, payload.patient_id, "ACTIVE", payload.language, "CHIEF_COMPLAINT", 0, os.getenv("AI_PROVIDER", "ollama"), now(), payload.care_mode),
+            "INSERT INTO encounters(encounter_id,patient_id,status,language,stage,revision,ai_provider,started_at,care_mode,processing_mode) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (encounter_id, payload.patient_id, "ACTIVE", payload.language, "CHIEF_COMPLAINT", 0, os.getenv("AI_PROVIDER", "ollama"), now(), payload.care_mode, payload.processing_mode),
         )
         db.execute("UPDATE consents SET encounter_id=? WHERE consent_id=?", (encounter_id, payload.consent_id))
         db.execute(
@@ -247,6 +299,7 @@ def start(payload: StartInput, user: AuthenticatedUser = Depends(current_user)):
         store.audit(db, user.user_id, "ENCOUNTER_STARTED", "ENCOUNTER", encounter_id)
         encounter = dict(db.execute("SELECT * FROM encounters WHERE encounter_id=?", (encounter_id,)).fetchone())
         result = _response(db, encounter)
+    result = _deliver_question(result)
     return {"message": "Interview started", "initial_question": result["next_question"], **result}
 
 
@@ -270,7 +323,10 @@ def answer(encounter_id: str, payload: AnswerInput, user: AuthenticatedUser = De
         if not clean_answer:
             raise HTTPException(status_code=422, detail="Please provide an answer before continuing")
     # Model inference must not hold the SQLite write lock. Recheck after inference.
-    interpretation = orchestrator.interpret(clean_answer, question["id"], {**state, '_question_fields': question.get('fields', [question['id']])})
+    try:
+        interpretation = orchestrator.interpret(clean_answer, question["id"], {**state, '_question_fields': question.get('fields', [question['id']])}, manual=encounter.get('processing_mode') == 'MANUAL')
+    except Exception as exc:
+        raise HTTPException(503, 'AI processing is unavailable. Your answer has not been saved. Retry or select manual intake.') from exc
     extraction, provider, ai_error = interpretation.extraction, interpretation.provider, interpretation.warning
     with store.connection() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -294,8 +350,8 @@ def answer(encounter_id: str, payload: AnswerInput, user: AuthenticatedUser = De
                     'evidence': f"Patient confirmed {confirmation['source']} {confirmation.get('document_id', confirmation.get('fact_id', ''))}: {clean_answer}"}
             _write_fact(db, encounter_id, encounter['patient_id'], fact, 'PATIENT_REPORTED')
             extraction.facts = [f for f in extraction.facts if f.field_name != question['id']]
-        for fact in extraction.facts:
-            safe_fact = fact.model_dump()
+        for extracted_fact in extraction.facts:
+            safe_fact = extracted_fact.model_dump()
             try:
                 safe_fact['value'] = validate_fact(safe_fact['field_name'], safe_fact['value'])
             except HTTPException:
@@ -316,7 +372,8 @@ def answer(encounter_id: str, payload: AnswerInput, user: AuthenticatedUser = De
         db.execute("UPDATE encounters SET status=?,stage=?,revision=?,ai_provider=? WHERE encounter_id=?", (next_status, next_stage, next_revision, provider, encounter_id))
         encounter.update({"status": next_status, "stage": next_stage, "revision": next_revision, "ai_provider": provider})
         store.audit(db, user.user_id, "INTERVIEW_ANSWER_RECORDED", "ENCOUNTER", encounter_id, {"question_id": question["id"], "provider": provider, "ai_latency_ms": interpretation.latency_ms})
-        return _response(db, encounter, extracted, ai_error)
+        result = _response(db, encounter, extracted, ai_error)
+    return _deliver_question(result)
 
 
 @router.post("/{encounter_id}/voice")
@@ -427,4 +484,5 @@ def detail(encounter_id: str, user: AuthenticatedUser = Depends(current_user)):
         assert_patient_access(db, user, encounter["patient_id"])
         answers = [dict(answer) for answer in db.execute("SELECT * FROM answers WHERE encounter_id=? ORDER BY created_at", (encounter_id,)).fetchall()]
         store.audit(db, user.user_id, "ENCOUNTER_VIEWED", "ENCOUNTER", encounter_id)
-        return {**_response(db, encounter), "answers": answers}
+        result = {**_response(db, encounter), "answers": answers}
+    return _deliver_question(result)
